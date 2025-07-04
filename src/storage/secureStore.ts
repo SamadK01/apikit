@@ -4,19 +4,31 @@ const TOKEN_KEY = 'apikit_token';
 
 export const secureStoreToken: TokenStorage = {
   async getToken() {
-    // Only import expo-secure-store if this storage is used
-    const SecureStore = require('expo-secure-store');
-    // TODO: error handling
-    return SecureStore.getItemAsync(TOKEN_KEY);
+    try {
+      // Only import expo-secure-store if this storage is used
+      const SecureStore = require('expo-secure-store');
+      return await SecureStore.getItemAsync(TOKEN_KEY);
+    } catch (error) {
+      console.warn('ApiKit: expo-secure-store not installed. Please install it: expo install expo-secure-store');
+      return null;
+    }
   },
   async setToken(token: string) {
-    const SecureStore = require('expo-secure-store');
-    // TODO: error handling
-    return SecureStore.setItemAsync(TOKEN_KEY, token);
+    try {
+      const SecureStore = require('expo-secure-store');
+      return await SecureStore.setItemAsync(TOKEN_KEY, token);
+    } catch (error) {
+      console.warn('ApiKit: expo-secure-store not installed. Please install it: expo install expo-secure-store');
+      return null;
+    }
   },
   async removeToken() {
-    const SecureStore = require('expo-secure-store');
-    // TODO: error handling
-    return SecureStore.deleteItemAsync(TOKEN_KEY);
+    try {
+      const SecureStore = require('expo-secure-store');
+      return await SecureStore.deleteItemAsync(TOKEN_KEY);
+    } catch (error) {
+      console.warn('ApiKit: expo-secure-store not installed. Please install it: expo install expo-secure-store');
+      return null;
+    }
   },
 };

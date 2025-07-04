@@ -37,9 +37,9 @@ ApiKit is the ultimate, modern API toolkit for React Native and Expo. It automat
 
 ### 1. Install ApiKit
 ```sh
-npm install apikit
+npm install react-native-apikit
 # or
-yarn add apikit
+yarn add react-native-apikit
 ```
 
 ### 2. (Optional) For Axios engine
@@ -47,15 +47,22 @@ yarn add apikit
 npm install axios
 ```
 
-### 3. For Token Storage
-- **React Native CLI:**
-  ```sh
-  npm install @react-native-async-storage/async-storage
-  ```
-- **Expo:**
-  ```sh
-  expo install expo-secure-store
-  ```
+### 3. For Token Storage (Choose ONE based on your project)
+
+#### For React Native CLI (Recommended)
+```sh
+npm install @react-native-async-storage/async-storage
+```
+
+#### For Expo projects only
+```sh
+expo install expo-secure-store
+```
+
+**Note:** 
+- Use `@react-native-async-storage/async-storage` for React Native CLI projects
+- Use `expo-secure-store` only for Expo projects
+- ApiKit will show helpful warnings if the required storage dependency isn't installed
 
 ---
 
@@ -63,21 +70,32 @@ npm install axios
 
 ### 1. Configure ApiKit (global setup)
 ```tsx
-import { configureApiKit, asyncStorageToken, secureStoreToken } from 'apikit';
+import { configureApiKit, asyncStorageToken, secureStoreToken } from 'react-native-apikit';
 
+// For React Native CLI (recommended)
 configureApiKit({
   baseUrl: 'https://api.example.com',
-  tokenStorage: asyncStorageToken, // or secureStoreToken for Expo
+  tokenStorage: asyncStorageToken, // Use this for React Native CLI
   engine: 'fetch', // or 'axios'
   retry: 2, // auto-retry failed requests
   timeout: 10000, // 10s timeout
+  onUnauthorized: () => {/* handle global 401 */},
+});
+
+// For Expo projects only
+configureApiKit({
+  baseUrl: 'https://api.example.com',
+  tokenStorage: secureStoreToken, // Use this for Expo
+  engine: 'fetch',
+  retry: 2,
+  timeout: 10000,
   onUnauthorized: () => {/* handle global 401 */},
 });
 ```
 
 ### 2. Use the `useApi` hook in your components
 ```tsx
-import { useApi } from 'apikit';
+import { useApi } from 'react-native-apikit';
 
 function UserList() {
   const { get, post, loading, error, data } = useApi();
@@ -138,11 +156,19 @@ configureApiKit({ tokenStorage: myStorage });
 
 ## 🔒 Token Management
 - **Automatic:** All requests include your token (Bearer) if available.
-- **Storage options:** AsyncStorage (default for RN CLI), SecureStore (Expo), or your own.
+- **Storage options:** 
+  - `asyncStorageToken` (React Native CLI - recommended)
+  - `secureStoreToken` (Expo projects only)
+  - Custom storage implementation
 - **Set/Remove token:**
   ```js
+  // For React Native CLI
   await asyncStorageToken.setToken('your-token');
   await asyncStorageToken.removeToken();
+  
+  // For Expo
+  await secureStoreToken.setToken('your-token');
+  await secureStoreToken.removeToken();
   ```
 
 ---
@@ -185,7 +211,8 @@ configureApiKit({ tokenStorage: myStorage });
 ## 🏆 Best Practices
 - Use `configureApiKit` at app startup (App.js/ts).
 - Use `useApi` in every screen/component for clean, isolated API logic.
-- Prefer asyncStorageToken for RN CLI, secureStoreToken for Expo.
+- **For React Native CLI:** Use `asyncStorageToken` (install `@react-native-async-storage/async-storage`)
+- **For Expo:** Use `secureStoreToken` (install `expo-secure-store`)
 - Use Axios engine only if you need interceptors or advanced cancel tokens.
 - Always handle `loading` and `error` states in UI.
 
@@ -198,13 +225,36 @@ configureApiKit({ tokenStorage: myStorage });
 
 ---
 
-## 🧑‍💻 Real-World Example (Expo + SecureStore)
+## 🧑‍💻 Real-World Examples
+
+### React Native CLI Example
 ```tsx
-import { configureApiKit, useApi, secureStoreToken } from 'apikit';
+import { configureApiKit, useApi, asyncStorageToken } from 'react-native-apikit';
 
 configureApiKit({
   baseUrl: 'https://api.example.com',
-  tokenStorage: secureStoreToken,
+  tokenStorage: asyncStorageToken, // For React Native CLI
+  engine: 'fetch',
+});
+
+export default function App() {
+  const { get, post, loading, error, data } = useApi();
+
+  useEffect(() => {
+    get('/me');
+  }, []);
+
+  // ...render UI
+}
+```
+
+### Expo Example
+```tsx
+import { configureApiKit, useApi, secureStoreToken } from 'react-native-apikit';
+
+configureApiKit({
+  baseUrl: 'https://api.example.com',
+  tokenStorage: secureStoreToken, // For Expo only
   engine: 'fetch',
 });
 
@@ -233,8 +283,8 @@ Returns `{ get, post, put, patch, del, loading, error, data, reset }`.
 - `axiosEngine` (optional, install axios)
 
 ### Token Storage
-- `asyncStorageToken` (React Native CLI)
-- `secureStoreToken` (Expo)
+- `asyncStorageToken` (React Native CLI - recommended)
+- `secureStoreToken` (Expo projects only)
 - Custom: `{ getToken, setToken, removeToken }`
 
 ---
@@ -253,7 +303,10 @@ MIT
 
 ## 🙋 FAQ
 **Q: Can I use ApiKit in Expo Go?**
-A: Yes! Use `secureStoreToken` for token storage.
+A: Yes! Use `secureStoreToken` for token storage and install `expo-secure-store`.
+
+**Q: Can I use ApiKit in React Native CLI?**
+A: Yes! Use `asyncStorageToken` for token storage and install `@react-native-async-storage/async-storage`.
 
 **Q: How do I switch to Axios?**
 A: `configureApiKit({ engine: 'axios' })` and install `axios`.
@@ -266,6 +319,9 @@ A: Use `headers` in `configureApiKit`.
 
 **Q: How do I catch validation errors?**
 A: All errors are parsed and available in the `error` object from `useApi`.
+
+**Q: What if I don't install the storage dependency?**
+A: ApiKit will show helpful console warnings and return null for token operations.
 
 ---
 

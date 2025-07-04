@@ -69,3 +69,4 @@ export interface ApiKitConfig {
   timeout?: number;
   headers?: Record<string, string>;
 }
+

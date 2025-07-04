@@ -30,3 +30,4 @@ export const fetchEngine: ApiEngine = {
   },
   // TODO: cancel support (AbortController)
 };
+
