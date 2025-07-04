@@ -10,7 +10,7 @@ ApiKit is the ultimate, modern API toolkit for React Native and Expo. It automat
 - **One hook, all power:** `useApi()` handles everything—no more manual state, try/catch, or header plumbing.
 - **Fetch-first, Axios-compatible:** Use the fastest native fetch, or switch to Axios (with interceptors/cancel tokens) instantly.
 - **Expo & React Native CLI:** Works out-of-the-box in all RN/Expo projects (Android/iOS/Web).
-- **Automatic token management:** Securely injects tokens from AsyncStorage, SecureStore, or your own storage.
+- **Automatic token management:** Securely injects tokens from AsyncStorage, SecureStore, MMKV, or your own storage.
 - **Smart response parsing:** Handles JSON, text, FormData, binary—no manual parsing needed.
 - **Network-aware:** Detects offline/online, retries smartly, and gives user-friendly errors.
 - **Minimal, fast, and extensible:** Tree-shakable, TypeScript-ready, and easy to extend.
@@ -20,7 +20,7 @@ ApiKit is the ultimate, modern API toolkit for React Native and Expo. It automat
 ## ✨ Features
 - Single, readable hook: `useApi()`
 - Built-in loading, error, data states
-- Automatic token injection (AsyncStorage, SecureStore, or custom)
+- Automatic token injection (AsyncStorage, SecureStore, MMKV, or custom)
 - Smart response parsing (JSON, text, FormData, binary)
 - Network status detection
 - Timeout & cancel support
@@ -59,9 +59,15 @@ npm install @react-native-async-storage/async-storage
 expo install expo-secure-store
 ```
 
+#### For Fastest Storage (MMKV)
+```sh
+npm install react-native-mmkv
+```
+
 **Note:** 
 - Use `@react-native-async-storage/async-storage` for React Native CLI projects
 - Use `expo-secure-store` only for Expo projects
+- Use `react-native-mmkv` for best performance (recommended for large apps)
 - ApiKit will show helpful warnings if the required storage dependency isn't installed
 
 ---
@@ -70,7 +76,7 @@ expo install expo-secure-store
 
 ### 1. Configure ApiKit (global setup)
 ```tsx
-import { configureApiKit, asyncStorageToken, secureStoreToken } from 'react-native-apikit';
+import { configureApiKit, asyncStorageToken, secureStoreToken, mmkvToken } from 'react-native-apikit';
 
 // For React Native CLI (recommended)
 configureApiKit({
@@ -86,6 +92,16 @@ configureApiKit({
 configureApiKit({
   baseUrl: 'https://api.example.com',
   tokenStorage: secureStoreToken, // Use this for Expo
+  engine: 'fetch',
+  retry: 2,
+  timeout: 10000,
+  onUnauthorized: () => {/* handle global 401 */},
+});
+
+// For Fastest Storage (MMKV)
+configureApiKit({
+  baseUrl: 'https://api.example.com',
+  tokenStorage: mmkvToken, // Use this for best performance
   engine: 'fetch',
   retry: 2,
   timeout: 10000,
@@ -144,6 +160,11 @@ configureApiKit({ engine: 'axios' });
 configureApiKit({ tokenStorage: secureStoreToken });
 ```
 
+### Use MMKV for Fastest Storage
+```tsx
+configureApiKit({ tokenStorage: mmkvToken });
+```
+
 ### Custom token storage
 ```tsx
 const myStorage = {
@@ -159,6 +180,7 @@ configureApiKit({ tokenStorage: myStorage });
 - **Storage options:** 
   - `asyncStorageToken` (React Native CLI - recommended)
   - `secureStoreToken` (Expo projects only)
+  - `mmkvToken` (Fastest, recommended for large apps)
   - Custom storage implementation
 - **Set/Remove token:**
   ```js
@@ -169,6 +191,10 @@ configureApiKit({ tokenStorage: myStorage });
   // For Expo
   await secureStoreToken.setToken('your-token');
   await secureStoreToken.removeToken();
+
+  // For MMKV
+  await mmkvToken.setToken('your-token');
+  await mmkvToken.removeToken();
   ```
 
 ---
@@ -213,6 +239,7 @@ configureApiKit({ tokenStorage: myStorage });
 - Use `useApi` in every screen/component for clean, isolated API logic.
 - **For React Native CLI:** Use `asyncStorageToken` (install `@react-native-async-storage/async-storage`)
 - **For Expo:** Use `secureStoreToken` (install `expo-secure-store`)
+- **For Fastest Storage:** Use `mmkvToken` (install `react-native-mmkv`)
 - Use Axios engine only if you need interceptors or advanced cancel tokens.
 - Always handle `loading` and `error` states in UI.
 
@@ -269,6 +296,27 @@ export default function App() {
 }
 ```
 
+### MMKV Example
+```tsx
+import { configureApiKit, useApi, mmkvToken } from 'react-native-apikit';
+
+configureApiKit({
+  baseUrl: 'https://api.example.com',
+  tokenStorage: mmkvToken, // For best performance
+  engine: 'fetch',
+});
+
+export default function App() {
+  const { get, post, loading, error, data } = useApi();
+
+  useEffect(() => {
+    get('/me');
+  }, []);
+
+  // ...render UI
+}
+```
+
 ---
 
 ## 📚 API Reference
@@ -285,6 +333,7 @@ Returns `{ get, post, put, patch, del, loading, error, data, reset }`.
 ### Token Storage
 - `asyncStorageToken` (React Native CLI - recommended)
 - `secureStoreToken` (Expo projects only)
+- `mmkvToken` (Fastest, recommended for large apps)
 - Custom: `{ getToken, setToken, removeToken }`
 
 ---
@@ -307,6 +356,9 @@ A: Yes! Use `secureStoreToken` for token storage and install `expo-secure-store`
 
 **Q: Can I use ApiKit in React Native CLI?**
 A: Yes! Use `asyncStorageToken` for token storage and install `@react-native-async-storage/async-storage`.
+
+**Q: Can I use ApiKit with MMKV?**
+A: Yes! Use `mmkvToken` for fastest storage and install `react-native-mmkv`.
 
 **Q: How do I switch to Axios?**
 A: `configureApiKit({ engine: 'axios' })` and install `axios`.
@@ -335,3 +387,4 @@ Pull requests, issues, and suggestions welcome!
 - [React Native Docs](https://reactnative.dev/)
 - [Expo Docs](https://docs.expo.dev/)
 - [Axios](https://axios-http.com/)
+- [MMKV](https://github.com/mrousavy/react-native-mmkv)

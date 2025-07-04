@@ -1,6 +1,6 @@
 {
   "name": "react-native-apikit",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -12,7 +12,7 @@
     "build": "tsc",
     "prepare": "npm run build"
   },
-  "keywords": ["react-native", "api", "fetch", "axios", "hooks", "typescript", "expo", "http-client", "api-client"],
+  "keywords": ["react-native", "api", "fetch", "axios", "hooks", "typescript", "expo", "http-client", "api-client", "mmkv"],
   "author": "SamadK01",
   "license": "MIT",
   "description": "Modern API toolkit for React Native and Expo with automatic token management, smart response parsing, and built-in error handling",
@@ -39,6 +39,7 @@
   "optionalDependencies": {
     "axios": ">=0.27.0",
     "@react-native-async-storage/async-storage": ">=1.19.0",
-    "expo-secure-store": ">=12.0.0"
+    "expo-secure-store": ">=12.0.0",
+    "react-native-mmkv": ">=3.0.0"
   }
 }
