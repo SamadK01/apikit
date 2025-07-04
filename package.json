@@ -12,7 +12,18 @@
     "build": "tsc",
     "prepare": "npm run build"
   },
-  "keywords": ["react-native", "api", "fetch", "axios", "hooks", "typescript", "expo", "http-client", "api-client", "mmkv"],
+  "keywords": [
+    "react-native",
+    "api",
+    "fetch",
+    "axios",
+    "hooks",
+    "typescript",
+    "expo",
+    "http-client",
+    "api-client",
+    "mmkv"
+  ],
   "author": "SamadK01",
   "license": "MIT",
   "description": "Modern API toolkit for React Native and Expo with automatic token management, smart response parsing, and built-in error handling",
@@ -25,11 +36,12 @@
     "url": "https://github.com/SamadK01/apikit/issues"
   },
   "dependencies": {
-    "react-native": "^0.80.1"
+    "react-native": ">=0.64.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.8",
     "@types/react-native": "^0.72.8",
+    "react-native-mmkv": "^3.3.0",
     "typescript": "^5.8.3"
   },
   "peerDependencies": {
@@ -37,8 +49,8 @@
     "react-native": ">=0.64.0"
   },
   "optionalDependencies": {
-    "axios": ">=0.27.0",
     "@react-native-async-storage/async-storage": ">=1.19.0",
+    "axios": ">=0.27.0",
     "expo-secure-store": ">=12.0.0",
     "react-native-mmkv": ">=3.0.0"
   }

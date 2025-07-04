@@ -21,5 +21,6 @@ __exportStar(require("./engine/fetchEngine"), exports);
 __exportStar(require("./engine/axiosEngine"), exports);
 __exportStar(require("./storage/asyncStorage"), exports);
 __exportStar(require("./storage/secureStore"), exports);
+__exportStar(require("./storage/mmkvStorage"), exports);
 var config_1 = require("./config");
 Object.defineProperty(exports, "configureApiKit", { enumerable: true, get: function () { return config_1.configureApiKit; } });
