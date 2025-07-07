@@ -388,3 +388,42 @@ Pull requests, issues, and suggestions welcome!
 - [Expo Docs](https://docs.expo.dev/)
 - [Axios](https://axios-http.com/)
 - [MMKV](https://github.com/mrousavy/react-native-mmkv)
+
+## 🆕 Use API Without Hook (Plain JS/Thunk)
+
+You can now use the API outside React components (e.g., in thunks, services, or plain JS):
+
+```js
+import { apiClient } from 'react-native-apikit';
+
+// GET request
+const { data, error } = await apiClient.get('/users');
+
+// POST request
+const { data, error } = await apiClient.post('/login', { email, password });
+
+// Full control
+const { data, error, status } = await apiClient.request({
+  method: 'PUT',
+  url: '/profile',
+  data: { name: 'John' },
+});
+```
+
+---
+
+## 🚀 MMKV Support (Recommended)
+
+ApiKit now supports [MMKV](https://github.com/mrousavy/react-native-mmkv) for ultra-fast, efficient token storage. Just use `mmkvToken` in your config:
+
+```js
+import { configureApiKit, mmkvToken } from 'react-native-apikit';
+
+configureApiKit({
+  baseUrl: 'https://api.example.com',
+  tokenStorage: mmkvToken, // Fastest storage
+  engine: 'fetch',
+});
+```
+
+MMKV is highly recommended for large apps or those needing best performance.
