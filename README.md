@@ -1,5 +1,15 @@
 # ApiKit
 
+## 🆕 What’s New in v1.4.0
+- **Global Interceptors:** Pre-request, post-response, and error hooks for full control
+- **Caching:** Plugin-based, with built-in in-memory cache (see below)
+- **Retry Logic:** Exponential backoff, configurable per request or globally
+- **Cancelable Requests:** All useApi methods now support cancellation
+- **Pagination:** New usePaginatedApi hook for easy paginated data fetching
+- **Tighter TypeScript Typings:** All new features are strongly typed for a great DX
+
+---
+
 > **Write once, request anywhere—no boilerplate, no confusion, just clean code.**
 
 ApiKit is the ultimate, modern API toolkit for React Native and Expo. It automates everything you repeat in API calls—loading, error, data states, token injection, smart response parsing, network status, timeout/cancel, global 401 handling, retry logic, and friendly error messages. Fetch is the default engine, but you can switch to Axios with one line. TypeScript-first, tree-shakable, minimal bundle size. For beginners and pros alike.
@@ -427,3 +437,82 @@ configureApiKit({
 ```
 
 MMKV is highly recommended for large apps or those needing best performance.
+
+---
+
+## 🧩 Advanced Usage & New Features
+
+### Global Interceptors (Pre-request, Post-response, Error)
+```js
+configureApiKit({
+  ...,
+  onRequest: async (config) => {
+    // Modify config before request
+    return config;
+  },
+  onResponse: async (response) => {
+    // Inspect/modify response
+    return response;
+  },
+  onError: async (error) => {
+    // Global error handling
+    return error;
+  },
+});
+```
+
+### Caching (with Plugin System)
+```js
+import { configureApiKit } from 'react-native-apikit';
+import { memoryCache } from 'react-native-apikit/dist/storage/asyncStorage';
+
+configureApiKit({
+  ...,
+  cache: memoryCache, // Built-in in-memory cache
+});
+
+// GET requests are cached automatically (default 1 min)
+get('/users');
+
+// Custom cache plugin example:
+const myCache = {
+  get: async (key) => ..., set: async (key, value, ttl) => ..., clear: async (key) => ...
+};
+configureApiKit({ cache: myCache });
+```
+
+### Retry Logic (Exponential Backoff)
+```js
+configureApiKit({ retry: 3 }); // Retries failed requests up to 3 times
+// Or per-request:
+get('/users', { timeout: 5000, /* ... */, });
+```
+
+### Cancelable Requests
+```js
+const { get } = useApi();
+const { promise, cancel } = get('/users');
+// To cancel:
+cancel();
+```
+
+### Pagination (usePaginatedApi)
+```js
+import { usePaginatedApi } from 'react-native-apikit';
+
+function UserList() {
+  const { data, loading, error, page, hasMore, nextPage, prevPage, reset } = usePaginatedApi('/users', {
+    pageSize: 20,
+    params: { status: 'active' },
+  });
+
+  // ...render paginated list, call nextPage() to load more
+}
+```
+
+---
+
+## 🔎 Quick Reference: New Config Options
+- `onRequest`, `onResponse`, `onError`: Interceptor hooks
+- `cache`: Caching plugin (see above)
+- `retry`: Number of retries (with exponential backoff)
