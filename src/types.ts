@@ -49,14 +49,27 @@ export interface UseApiState<T = any> {
   data: T | null;
 }
 
+// Cancelable request return type
+export interface CancelableRequest {
+  promise: Promise<void>;
+  cancel: () => void | undefined;
+}
+
 // useApi hook return
 export interface UseApiReturn<T = any> extends UseApiState<T> {
-  get: (url: string, config?: ApiRequestConfig) => Promise<void>;
-  post: (url: string, data?: any, config?: ApiRequestConfig) => Promise<void>;
-  put: (url: string, data?: any, config?: ApiRequestConfig) => Promise<void>;
-  patch: (url: string, data?: any, config?: ApiRequestConfig) => Promise<void>;
-  del: (url: string, config?: ApiRequestConfig) => Promise<void>;
+  get: (url: string, config?: ApiRequestConfig) => CancelableRequest;
+  post: (url: string, data?: any, config?: ApiRequestConfig) => CancelableRequest;
+  put: (url: string, data?: any, config?: ApiRequestConfig) => CancelableRequest;
+  patch: (url: string, data?: any, config?: ApiRequestConfig) => CancelableRequest;
+  del: (url: string, config?: ApiRequestConfig) => CancelableRequest;
   reset: () => void;
+}
+
+// Cache abstraction
+export interface ApiCache {
+  get<T = any>(key: string): Promise<T | undefined> | T | undefined;
+  set<T = any>(key: string, value: T, ttlMs?: number): Promise<void> | void;
+  clear?(key?: string): Promise<void> | void;
 }
 
 // ApiKit config
@@ -68,5 +81,11 @@ export interface ApiKitConfig {
   retry?: number;
   timeout?: number;
   headers?: Record<string, string>;
+  // Interceptors
+  onRequest?: (config: ApiRequestConfig) => Promise<ApiRequestConfig> | ApiRequestConfig;
+  onResponse?: (response: ApiResponse) => Promise<ApiResponse> | ApiResponse;
+  onError?: (error: ApiError) => Promise<ApiError> | ApiError;
+  // Caching
+  cache?: ApiCache;
 }
 

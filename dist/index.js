@@ -14,7 +14,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.configureApiKit = void 0;
+exports.mmkvToken = exports.apiClient = exports.configureApiKit = void 0;
 __exportStar(require("./hooks/useApi"), exports);
 __exportStar(require("./types"), exports);
 __exportStar(require("./engine/fetchEngine"), exports);
@@ -24,3 +24,7 @@ __exportStar(require("./storage/secureStore"), exports);
 __exportStar(require("./storage/mmkvStorage"), exports);
 var config_1 = require("./config");
 Object.defineProperty(exports, "configureApiKit", { enumerable: true, get: function () { return config_1.configureApiKit; } });
+var plainApiClient_1 = require("./plainApiClient");
+Object.defineProperty(exports, "apiClient", { enumerable: true, get: function () { return plainApiClient_1.apiClient; } });
+var mmkvStorage_1 = require("./storage/mmkvStorage");
+Object.defineProperty(exports, "mmkvToken", { enumerable: true, get: function () { return mmkvStorage_1.mmkvToken; } });

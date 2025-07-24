@@ -32,3 +32,34 @@ export const asyncStorageToken: TokenStorage = {
     }
   },
 };
+
+// In-memory time-based cache (example)
+import { ApiCache } from '../types';
+
+function now() { return Date.now(); }
+
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+
+const _store: Record<string, CacheEntry<any>> = {};
+
+export const memoryCache: ApiCache = {
+  get<T = any>(key: string): T | undefined {
+    const entry = _store[key];
+    if (!entry) return undefined;
+    if (entry.expiresAt < now()) {
+      delete _store[key];
+      return undefined;
+    }
+    return entry.value;
+  },
+  set<T = any>(key: string, value: T, ttlMs: number = 60000) {
+    _store[key] = { value, expiresAt: now() + ttlMs };
+  },
+  clear(key?: string) {
+    if (key) delete _store[key];
+    else Object.keys(_store).forEach(k => delete _store[k]);
+  }
+};
