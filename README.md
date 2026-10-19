@@ -1,518 +1,303 @@
-# ApiKit
+# ApiKit ⚡️
 
-## 🆕 What’s New in v1.4.0
-- **Global Interceptors:** Pre-request, post-response, and error hooks for full control
-- **Caching:** Plugin-based, with built-in in-memory cache (see below)
-- **Retry Logic:** Exponential backoff, configurable per request or globally
-- **Cancelable Requests:** All useApi methods now support cancellation
-- **Pagination:** New usePaginatedApi hook for easy paginated data fetching
-- **Tighter TypeScript Typings:** All new features are strongly typed for a great DX
+> **The modern, ultra-lightweight, AI-ready API toolkit for React Native and Expo.**  
+> *Zero runtime dependencies. Featherweight (< 15KB gzipped). Full TypeScript support.*
 
----
-
-> **Write once, request anywhere—no boilerplate, no confusion, just clean code.**
-
-ApiKit is the ultimate, modern API toolkit for React Native and Expo. It automates everything you repeat in API calls—loading, error, data states, token injection, smart response parsing, network status, timeout/cancel, global 401 handling, retry logic, and friendly error messages. Fetch is the default engine, but you can switch to Axios with one line. TypeScript-first, tree-shakable, minimal bundle size. For beginners and pros alike.
+[![npm version](https://img.shields.io/npm/v/react-native-apikit.svg?style=flat-square)](https://www.npmjs.com/package/react-native-apikit)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://github.com/SamadK01/apikit/pulls)
 
 ---
 
-## 🚀 Why ApiKit?
-- **One hook, all power:** `useApi()` handles everything—no more manual state, try/catch, or header plumbing.
-- **Fetch-first, Axios-compatible:** Use the fastest native fetch, or switch to Axios (with interceptors/cancel tokens) instantly.
-- **Expo & React Native CLI:** Works out-of-the-box in all RN/Expo projects (Android/iOS/Web).
-- **Automatic token management:** Securely injects tokens from AsyncStorage, SecureStore, MMKV, or your own storage.
-- **Smart response parsing:** Handles JSON, text, FormData, binary—no manual parsing needed.
-- **Network-aware:** Detects offline/online, retries smartly, and gives user-friendly errors.
-- **Minimal, fast, and extensible:** Tree-shakable, TypeScript-ready, and easy to extend.
+## 🆕 What's New in v2.0.0 (Pro & AI-Ready Release)
 
----
-
-## ✨ Features
-- Single, readable hook: `useApi()`
-- Built-in loading, error, data states
-- Automatic token injection (AsyncStorage, SecureStore, MMKV, or custom)
-- Smart response parsing (JSON, text, FormData, binary)
-- Network status detection
-- Timeout & cancel support
-- Global 401 handling
-- Retry logic
-- Friendly error messages ("No Internet", "Server Error", validation, etc.)
-- Fetch default, Axios optional (with interceptors/cancel tokens)
-- TypeScript support, tree-shakable, minimal bundle size
-- Expo & React Native CLI compatible
+- 🤖 **LLM / AI Streaming Hook (`useAiStream`):** First-class Server-Sent Events (SSE) streaming for OpenAI, Claude, DeepSeek, and Gemini in React Native.
+- 🔄 **Silent Token Refresh Queue:** Automatically catches 401s, calls `refreshToken()`, and transparently replays pending requests.
+- 📶 **Persistent Offline Queue (`offlineQueue`):** Auto-captures failed mutations (POST, PUT, DELETE) and auto-syncs when internet restores.
+- ⏳ **Smart Rate-Limit Backoff (429 & Retry-After):** Automatically respects `Retry-After` and LLM rate-limit headers with jittered backoff.
+- 📤 **Native File Upload with Progress (`uploadFile`):** Real-time percentage tracking for photos, videos, and FormData without bulky libraries.
+- 🛡 **Runtime Schema Validation:** Compatible with Zod, Yup, Valibot, and TypeBox out-of-the-box.
+- 🏢 **Multi-Client Support (`createApiClient`):** Spin up isolated instances with independent base URLs and tokens for microservices.
+- 📊 **In-App Network & AI Token Logger (`apiLogger`):** Visual request/response timing and LLM token usage estimator in dev mode.
+- 🗄 **Zero-Crash Storage Adapters:** MMKV, AsyncStorage, and SecureStore are now safely lazy-loaded—never crash on missing optional modules.
 
 ---
 
 ## 📦 Installation
 
-### 1. Install ApiKit
 ```sh
 npm install react-native-apikit
 # or
 yarn add react-native-apikit
+# or
+pnpm add react-native-apikit
 ```
 
-### 2. (Optional) For Axios engine
+### Optional Storage Engine (Choose what you use)
+
 ```sh
+# For MMKV (Fastest, recommended)
+npm install react-native-mmkv
+
+# For React Native CLI
+npm install @react-native-async-storage/async-storage
+
+# For Expo
+npx expo install expo-secure-store
+
+# For Axios engine (Optional, fetch is default)
 npm install axios
 ```
 
-### 3. For Token Storage (Choose ONE based on your project)
+---
 
-#### For React Native CLI (Recommended)
-```sh
-npm install @react-native-async-storage/async-storage
+## 🚀 Quick Start
+
+### 1. Configure ApiKit globally
+
+```tsx
+import { configureApiKit, mmkvToken, asyncStorageToken, secureStoreToken } from 'react-native-apikit';
+
+configureApiKit({
+  baseUrl: 'https://api.example.com',
+  tokenStorage: mmkvToken, // or asyncStorageToken, secureStoreToken
+  retry: 2,
+  timeout: 10000,
+  debug: __DEV__, // In-app network logger
+  // Silent Token Refresh
+  refreshToken: async () => {
+    const res = await fetch('https://api.example.com/auth/refresh');
+    const data = await res.json();
+    return data.accessToken;
+  },
+  onUnauthorized: () => {
+    // Navigate to Login screen
+  },
+});
 ```
-
-#### For Expo projects only
-```sh
-expo install expo-secure-store
-```
-
-#### For Fastest Storage (MMKV)
-```sh
-npm install react-native-mmkv
-```
-
-**Note:** 
-- Use `@react-native-async-storage/async-storage` for React Native CLI projects
-- Use `expo-secure-store` only for Expo projects
-- Use `react-native-mmkv` for best performance (recommended for large apps)
-- ApiKit will show helpful warnings if the required storage dependency isn't installed
 
 ---
 
-## ⚡️ Quick Start
+## 💡 Core Features & Examples
 
-### 1. Configure ApiKit (global setup)
+### 1. 🤖 AI & LLM Streaming (`useAiStream`)
+
+Stream real-time responses from OpenAI, Anthropic, Gemini, or custom SSE backends directly into your React Native UI:
+
 ```tsx
-import { configureApiKit, asyncStorageToken, secureStoreToken, mmkvToken } from 'react-native-apikit';
+import React, { useState } from 'react';
+import { View, Text, TextInput, Button, ScrollView } from 'react-native';
+import { useAiStream } from 'react-native-apikit';
 
-// For React Native CLI (recommended)
-configureApiKit({
-  baseUrl: 'https://api.example.com',
-  tokenStorage: asyncStorageToken, // Use this for React Native CLI
-  engine: 'fetch', // or 'axios'
-  retry: 2, // auto-retry failed requests
-  timeout: 10000, // 10s timeout
-  onUnauthorized: () => {/* handle global 401 */},
-});
+export function ChatScreen() {
+  const [prompt, setPrompt] = useState('');
+  const { text, isStreaming, tokensCount, stream, stop } = useAiStream();
 
-// For Expo projects only
-configureApiKit({
-  baseUrl: 'https://api.example.com',
-  tokenStorage: secureStoreToken, // Use this for Expo
-  engine: 'fetch',
-  retry: 2,
-  timeout: 10000,
-  onUnauthorized: () => {/* handle global 401 */},
-});
+  const handleSend = () => {
+    stream('/chat/completions', {
+      method: 'POST',
+      body: {
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: prompt }],
+        stream: true,
+      },
+    });
+  };
 
-// For Fastest Storage (MMKV)
-configureApiKit({
-  baseUrl: 'https://api.example.com',
-  tokenStorage: mmkvToken, // Use this for best performance
-  engine: 'fetch',
-  retry: 2,
-  timeout: 10000,
-  onUnauthorized: () => {/* handle global 401 */},
-});
+  return (
+    <View style={{ flex: 1, padding: 20 }}>
+      <ScrollView style={{ flex: 1 }}>
+        <Text>{text}</Text>
+      </ScrollView>
+      
+      {isStreaming && (
+        <Text style={{ color: 'gray' }}>Streaming... (~{tokensCount} tokens)</Text>
+      )}
+
+      <TextInput value={prompt} onChangeText={setPrompt} placeholder="Ask anything..." />
+      <Button title={isStreaming ? "Stop" : "Send"} onPress={isStreaming ? stop : handleSend} />
+    </View>
+  );
+}
 ```
 
-### 2. Use the `useApi` hook in your components
+---
+
+### 2. ⚡️ The Classic `useApi` Hook
+
+Handles `data`, `loading`, `error`, and request cancellation out of the box:
+
 ```tsx
+import React, { useEffect } from 'react';
+import { View, Text, ActivityIndicator, FlatList, Button } from 'react-native';
 import { useApi } from 'react-native-apikit';
 
-function UserList() {
-  const { get, post, loading, error, data } = useApi();
+export function UserList() {
+  const { get, data, loading, error } = useApi<User[]>();
 
   useEffect(() => {
-    get('/users');
+    const request = get('/users');
+    return () => request.cancel(); // Auto-cancel on unmount
   }, []);
 
   if (loading) return <ActivityIndicator />;
-  if (error) return <Text>{error.message}</Text>;
-  return <FlatList data={data} renderItem={...} />;
+  if (error) return <Text>Error: {error.message}</Text>;
+
+  return (
+    <FlatList
+      data={data}
+      keyExtractor={item => String(item.id)}
+      renderItem={({ item }) => <Text>{item.name}</Text>}
+    />
+  );
 }
 ```
 
 ---
 
-## 🛠 Usage Examples
+### 3. 📤 File & Media Upload with Progress
 
-### GET request
+Upload images, videos, and documents with real-time percentage progress:
+
 ```tsx
-const { get, data, loading, error } = useApi();
-get('/users');
-```
-
-### POST request with body
-```tsx
-post('/login', { email, password });
-```
-
-### Custom headers, params, and error handling
-```tsx
-get('/profile', {
-  headers: { 'X-Custom': 'value' },
-  params: { lang: 'en' },
-  timeout: 5000,
-});
-```
-
-### Switch to Axios engine
-```tsx
-configureApiKit({ engine: 'axios' });
-```
-
-### Use SecureStore for Expo
-```tsx
-configureApiKit({ tokenStorage: secureStoreToken });
-```
-
-### Use MMKV for Fastest Storage
-```tsx
-configureApiKit({ tokenStorage: mmkvToken });
-```
-
-### Custom token storage
-```tsx
-const myStorage = {
-  getToken: async () => ..., setToken: async (t) => ..., removeToken: async () => ...
-};
-configureApiKit({ tokenStorage: myStorage });
-```
-
----
-
-## 🔒 Token Management
-- **Automatic:** All requests include your token (Bearer) if available.
-- **Storage options:** 
-  - `asyncStorageToken` (React Native CLI - recommended)
-  - `secureStoreToken` (Expo projects only)
-  - `mmkvToken` (Fastest, recommended for large apps)
-  - Custom storage implementation
-- **Set/Remove token:**
-  ```js
-  // For React Native CLI
-  await asyncStorageToken.setToken('your-token');
-  await asyncStorageToken.removeToken();
-  
-  // For Expo
-  await secureStoreToken.setToken('your-token');
-  await secureStoreToken.removeToken();
-
-  // For MMKV
-  await mmkvToken.setToken('your-token');
-  await mmkvToken.removeToken();
-  ```
-
----
-
-## 🌐 Network, Timeout, Retry, Cancel
-- **Network status:** Detects offline/online, returns friendly errors.
-- **Timeout:** Set per-request or globally.
-- **Retry:** Auto-retry failed requests (configurable).
-- **Cancel:** Cancel requests with AbortController (fetch) or cancel tokens (axios).
-
----
-
-## 🧩 Advanced: Custom Engine & Extensibility
-- **Custom engine:**
-  ```js
-  const myEngine = { request: async (config) => { /* ... */ } };
-  configureApiKit({ engine: myEngine });
-  ```
-- **Interceptors (Axios):** Use axios as usual, all interceptors/cancel tokens work.
-- **Global 401:** Handle unauthorized globally with `onUnauthorized`.
-
----
-
-## 🆚 ApiKit vs Others
-| Feature                | ApiKit | react-query | swr | axios | fetch |
-|------------------------|:------:|:-----------:|:---:|:-----:|:-----:|
-| React Native/Expo      |   ✅   |      ⚠️      | ⚠️  |   ✅   |  ✅   |
-| useApi hook            |   ✅   |      ❌      | ❌  |   ❌   |  ❌   |
-| Built-in loading/error |   ✅   |      ✅      | ✅  |   ❌   |  ❌   |
-| Token injection        |   ✅   |      ❌      | ❌  |   ❌   |  ❌   |
-| Engine switch (fetch/axios) | ✅ | ❌ | ❌ | ✅ | ✅ |
-| Network/timeout/cancel |   ✅   |      ⚠️      | ⚠️  |   ⚠️   |  ⚠️   |
-| Retry logic            |   ✅   |      ✅      | ✅  |   ⚠️   |  ⚠️   |
-| Global 401             |   ✅   |      ❌      | ❌  |   ❌   |  ❌   |
-| Tree-shakable/minimal  |   ✅   |      ❌      | ❌  |   ❌   |  ✅   |
-| TypeScript-first       |   ✅   |      ✅      | ✅  |   ⚠️   |  ⚠️   |
-
----
-
-## 🏆 Best Practices
-- Use `configureApiKit` at app startup (App.js/ts).
-- Use `useApi` in every screen/component for clean, isolated API logic.
-- **For React Native CLI:** Use `asyncStorageToken` (install `@react-native-async-storage/async-storage`)
-- **For Expo:** Use `secureStoreToken` (install `expo-secure-store`)
-- **For Fastest Storage:** Use `mmkvToken` (install `react-native-mmkv`)
-- Use Axios engine only if you need interceptors or advanced cancel tokens.
-- Always handle `loading` and `error` states in UI.
-
----
-
-## 🔄 Migrating from Axios/Fetch/Other Hooks
-- Replace all manual fetch/axios calls with `useApi().get/post/put/patch/del`.
-- Remove manual state, try/catch, and token/header plumbing.
-- Use ApiKit's built-in error and loading states.
-
----
-
-## 🧑‍💻 Real-World Examples
-
-### React Native CLI Example
-```tsx
-import { configureApiKit, useApi, asyncStorageToken } from 'react-native-apikit';
-
-configureApiKit({
-  baseUrl: 'https://api.example.com',
-  tokenStorage: asyncStorageToken, // For React Native CLI
-  engine: 'fetch',
-});
-
-export default function App() {
-  const { get, post, loading, error, data } = useApi();
-
-  useEffect(() => {
-    get('/me');
-  }, []);
-
-  // ...render UI
-}
-```
-
-### Expo Example
-```tsx
-import { configureApiKit, useApi, secureStoreToken } from 'react-native-apikit';
-
-configureApiKit({
-  baseUrl: 'https://api.example.com',
-  tokenStorage: secureStoreToken, // For Expo only
-  engine: 'fetch',
-});
-
-export default function App() {
-  const { get, post, loading, error, data } = useApi();
-
-  useEffect(() => {
-    get('/me');
-  }, []);
-
-  // ...render UI
-}
-```
-
-### MMKV Example
-```tsx
-import { configureApiKit, useApi, mmkvToken } from 'react-native-apikit';
-
-configureApiKit({
-  baseUrl: 'https://api.example.com',
-  tokenStorage: mmkvToken, // For best performance
-  engine: 'fetch',
-});
-
-export default function App() {
-  const { get, post, loading, error, data } = useApi();
-
-  useEffect(() => {
-    get('/me');
-  }, []);
-
-  // ...render UI
-}
-```
-
----
-
-## 📚 API Reference
-### `configureApiKit(config)`
-Set global config (baseUrl, engine, tokenStorage, retry, timeout, onUnauthorized, headers).
-
-### `useApi()`
-Returns `{ get, post, put, patch, del, loading, error, data, reset }`.
-
-### Engines
-- `fetchEngine` (default)
-- `axiosEngine` (optional, install axios)
-
-### Token Storage
-- `asyncStorageToken` (React Native CLI - recommended)
-- `secureStoreToken` (Expo projects only)
-- `mmkvToken` (Fastest, recommended for large apps)
-- Custom: `{ getToken, setToken, removeToken }`
-
----
-
-## 📲 Platform Support
-- **Android:** 100% compatible (Expo & RN CLI)
-- **iOS:** 100% compatible (Expo & RN CLI)
-- **Web:** Works with fetch engine (limited features)
-
----
-
-## 📝 License
-MIT
-
----
-
-## 🙋 FAQ
-**Q: Can I use ApiKit in Expo Go?**
-A: Yes! Use `secureStoreToken` for token storage and install `expo-secure-store`.
-
-**Q: Can I use ApiKit in React Native CLI?**
-A: Yes! Use `asyncStorageToken` for token storage and install `@react-native-async-storage/async-storage`.
-
-**Q: Can I use ApiKit with MMKV?**
-A: Yes! Use `mmkvToken` for fastest storage and install `react-native-mmkv`.
-
-**Q: How do I switch to Axios?**
-A: `configureApiKit({ engine: 'axios' })` and install `axios`.
-
-**Q: How do I handle file uploads?**
-A: Pass `FormData` as `data` in your request.
-
-**Q: How do I add global headers?**
-A: Use `headers` in `configureApiKit`.
-
-**Q: How do I catch validation errors?**
-A: All errors are parsed and available in the `error` object from `useApi`.
-
-**Q: What if I don't install the storage dependency?**
-A: ApiKit will show helpful console warnings and return null for token operations.
-
----
-
-## 🤝 Contributing
-Pull requests, issues, and suggestions welcome!
-
----
-
-## 🔗 Links
-- [ApiKit GitHub](https://github.com/SamadK01/apikit)
-- [React Native Docs](https://reactnative.dev/)
-- [Expo Docs](https://docs.expo.dev/)
-- [Axios](https://axios-http.com/)
-- [MMKV](https://github.com/mrousavy/react-native-mmkv)
-
-## 🆕 Use API Without Hook (Plain JS/Thunk)
-
-You can now use the API outside React components (e.g., in thunks, services, or plain JS):
-
-```js
 import { apiClient } from 'react-native-apikit';
 
-// GET request
-const { data, error } = await apiClient.get('/users');
+async function uploadAvatar(fileUri: string) {
+  const formData = new FormData();
+  formData.append('avatar', {
+    uri: fileUri,
+    type: 'image/jpeg',
+    name: 'avatar.jpg',
+  } as any);
 
-// POST request
-const { data, error } = await apiClient.post('/login', { email, password });
-
-// Full control
-const { data, error, status } = await apiClient.request({
-  method: 'PUT',
-  url: '/profile',
-  data: { name: 'John' },
-});
-```
-
----
-
-## 🚀 MMKV Support (Recommended)
-
-ApiKit now supports [MMKV](https://github.com/mrousavy/react-native-mmkv) for ultra-fast, efficient token storage. Just use `mmkvToken` in your config:
-
-```js
-import { configureApiKit, mmkvToken } from 'react-native-apikit';
-
-configureApiKit({
-  baseUrl: 'https://api.example.com',
-  tokenStorage: mmkvToken, // Fastest storage
-  engine: 'fetch',
-});
-```
-
-MMKV is highly recommended for large apps or those needing best performance.
-
----
-
-## 🧩 Advanced Usage & New Features
-
-### Global Interceptors (Pre-request, Post-response, Error)
-```js
-configureApiKit({
-  ...,
-  onRequest: async (config) => {
-    // Modify config before request
-    return config;
-  },
-  onResponse: async (response) => {
-    // Inspect/modify response
-    return response;
-  },
-  onError: async (error) => {
-    // Global error handling
-    return error;
-  },
-});
-```
-
-### Caching (with Plugin System)
-```js
-import { configureApiKit } from 'react-native-apikit';
-import { memoryCache } from 'react-native-apikit/dist/storage/asyncStorage';
-
-configureApiKit({
-  ...,
-  cache: memoryCache, // Built-in in-memory cache
-});
-
-// GET requests are cached automatically (default 1 min)
-get('/users');
-
-// Custom cache plugin example:
-const myCache = {
-  get: async (key) => ..., set: async (key, value, ttl) => ..., clear: async (key) => ...
-};
-configureApiKit({ cache: myCache });
-```
-
-### Retry Logic (Exponential Backoff)
-```js
-configureApiKit({ retry: 3 }); // Retries failed requests up to 3 times
-// Or per-request:
-get('/users', { timeout: 5000, /* ... */, });
-```
-
-### Cancelable Requests
-```js
-const { get } = useApi();
-const { promise, cancel } = get('/users');
-// To cancel:
-cancel();
-```
-
-### Pagination (usePaginatedApi)
-```js
-import { usePaginatedApi } from 'react-native-apikit';
-
-function UserList() {
-  const { data, loading, error, page, hasMore, nextPage, prevPage, reset } = usePaginatedApi('/users', {
-    pageSize: 20,
-    params: { status: 'active' },
+  const { data, error } = await apiClient.upload('/user/avatar', formData, {
+    onUploadProgress: ({ percent, loaded, total }) => {
+      console.log(`Upload: ${percent}% (${loaded}/${total} bytes)`);
+    },
   });
 
-  // ...render paginated list, call nextPage() to load more
+  if (error) {
+    console.error('Upload failed:', error.message);
+  } else {
+    console.log('Uploaded successfully:', data);
+  }
 }
 ```
 
 ---
 
-## 🔎 Quick Reference: New Config Options
-- `onRequest`, `onResponse`, `onError`: Interceptor hooks
-- `cache`: Caching plugin (see above)
-- `retry`: Number of retries (with exponential backoff)
+### 4. 📶 Offline Mutation Queue (`offlineQueue`)
+
+Never lose user actions when the connection drops:
+
+```tsx
+import { apiClient, offlineQueue } from 'react-native-apikit';
+
+// Send a like/comment with offline queue enabled
+await apiClient.post('/posts/1/like', {}, { offlineQueue: true });
+
+// Sync pending items when back online:
+const results = await offlineQueue.sync(apiClient);
+console.log(`Synced ${results.length} offline mutations`);
+```
+
+---
+
+### 5. 🛡 Runtime Schema Validation (Zod / Yup)
+
+Safely validate responses and guarantee typed models:
+
+```tsx
+import { z } from 'zod';
+import { apiClient } from 'react-native-apikit';
+
+const UserSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string().email(),
+});
+
+const { data, error } = await apiClient.get('/profile', {
+  schema: UserSchema,
+});
+```
+
+---
+
+### 6. 🏢 Multi-Client Architecture (`createApiClient`)
+
+Create isolated client instances for different services or microservices:
+
+```tsx
+import { createApiClient } from 'react-native-apikit';
+
+// Auth Microservice
+export const authClient = createApiClient({
+  baseUrl: 'https://auth.company.com/api',
+});
+
+// Payments Microservice
+export const paymentClient = createApiClient({
+  baseUrl: 'https://payments.company.com/api',
+  timeout: 15000,
+});
+
+// Use client-scoped hook
+export function PaymentStatus() {
+  const { get, data, loading } = paymentClient.useApi();
+  // ...
+}
+```
+
+---
+
+### 7. 📄 Infinite Pagination (`usePaginatedApi`)
+
+```tsx
+import { usePaginatedApi } from 'react-native-apikit';
+
+export function ProductsScreen() {
+  const { data, loading, hasMore, nextPage, refresh } = usePaginatedApi<Product>('/products', {
+    pageSize: 20,
+  });
+
+  return (
+    <FlatList
+      data={data}
+      onEndReached={nextPage}
+      refreshing={loading}
+      onRefresh={refresh}
+      renderItem={({ item }) => <Text>{item.title}</Text>}
+    />
+  );
+}
+```
+
+---
+
+## ⚙️ Configuration Reference
+
+```ts
+interface ApiKitConfig {
+  baseUrl?: string;
+  engine?: 'fetch' | 'axios' | ApiEngine;
+  tokenStorage?: TokenStorage; // mmkvToken | asyncStorageToken | secureStoreToken
+  refreshToken?: () => Promise<string | null>; // Silent token refresh
+  onUnauthorized?: () => void; // Global 401 handler
+  retry?: number; // Auto-retry attempts (default: 0)
+  retryAfter429?: boolean; // AI/Rate-limit auto-backoff (default: true)
+  timeout?: number; // Default timeout ms (default: 10000)
+  headers?: Record<string, string>;
+  debug?: boolean; // In-app network logger with AI token tracking
+  onRequest?: (config: ApiRequestConfig) => Promise<ApiRequestConfig> | ApiRequestConfig;
+  onResponse?: (response: ApiResponse) => Promise<ApiResponse> | ApiResponse;
+  onError?: (error: ApiError) => Promise<ApiError> | ApiError;
+  cache?: ApiCache; // In-memory or custom cache
+}
+```
+
+---
+
+## 📄 License
+
+MIT © [SamadK01](https://github.com/SamadK01)

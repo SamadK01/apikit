@@ -1,10 +1,15 @@
 export * from './hooks/useApi';
+export * from './hooks/useAiStream';
 export * from './types';
 export * from './engine/fetchEngine';
 export * from './engine/axiosEngine';
 export * from './storage/asyncStorage';
 export * from './storage/secureStore';
 export * from './storage/mmkvStorage';
-export { configureApiKit } from './config';
-export { apiClient } from './plainApiClient';
-export { mmkvToken } from './storage/mmkvStorage';
+export { configureApiKit, getApiKitConfig, getEngine } from './config';
+export { apiClient, executeRequest } from './plainApiClient';
+export { createApiClient } from './createApiClient';
+export { offlineQueue } from './offline/offlineQueue';
+export { uploadFile } from './utils/uploader';
+export { apiLogger, estimateAiTokens } from './utils/logger';
+export { parseRetryAfter, calculateBackoffWithJitter } from './utils/rateLimit';

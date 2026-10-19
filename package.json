@@ -1,6 +1,6 @@
 {
   "name": "react-native-apikit",
-  "version": "1.4.0",
+  "version": "2.0.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -22,11 +22,19 @@
     "expo",
     "http-client",
     "api-client",
-    "mmkv"
+    "ai",
+    "llm",
+    "streaming",
+    "sse",
+    "offline-first",
+    "rate-limiting",
+    "mmkv",
+    "upload-progress",
+    "token-refresh"
   ],
   "author": "SamadK01",
   "license": "MIT",
-  "description": "Modern API toolkit for React Native and Expo with automatic token management, smart response parsing, and built-in error handling",
+  "description": "Ultra-lightweight, AI-ready API toolkit for React Native and Expo with LLM streaming, offline sync, automatic token refresh, smart rate-limiting, and upload tracking",
   "repository": {
     "type": "git",
     "url": "https://github.com/SamadK01/apikit.git"
@@ -35,12 +43,11 @@
   "bugs": {
     "url": "https://github.com/SamadK01/apikit/issues"
   },
-  "dependencies": {
-    "react-native": ">=0.64.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/react": "^19.1.8",
     "@types/react-native": "^0.72.8",
+    "react-native": "^0.78.0",
     "react-native-mmkv": "^3.3.0",
     "typescript": "^5.8.3"
   },

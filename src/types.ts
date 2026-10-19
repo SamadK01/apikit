@@ -1,6 +1,20 @@
-// API request config
-type ApiMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+// API request methods
+export type ApiMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
+// Upload progress interface
+export interface UploadProgress {
+  loaded: number;
+  total: number;
+  percent: number;
+}
+
+// Universal schema validator (compatible with Zod, Yup, Valibot, ArkType, etc.)
+export interface SchemaValidator<T = any> {
+  parse?: (data: unknown) => T;
+  safeParse?: (data: unknown) => { success: true; data: T } | { success: false; error: any };
+}
+
+// API request config
 export interface ApiRequestConfig {
   url: string;
   method?: ApiMethod;
@@ -9,6 +23,14 @@ export interface ApiRequestConfig {
   headers?: Record<string, string>;
   timeout?: number;
   signal?: AbortSignal;
+  retry?: number;
+  retryAfter429?: boolean;
+  skipToken?: boolean;
+  schema?: SchemaValidator<any>;
+  cacheTtlMs?: number;
+  skipCache?: boolean;
+  onUploadProgress?: (progress: UploadProgress) => void;
+  offlineQueue?: boolean;
 }
 
 // API response
@@ -27,6 +49,9 @@ export interface ApiError {
   isNetworkError?: boolean;
   isTimeout?: boolean;
   isUnauthorized?: boolean;
+  isRateLimited?: boolean;
+  retryAfterMs?: number;
+  rawError?: any;
 }
 
 // Engine abstraction
@@ -50,18 +75,18 @@ export interface UseApiState<T = any> {
 }
 
 // Cancelable request return type
-export interface CancelableRequest {
-  promise: Promise<void>;
-  cancel: () => void | undefined;
+export interface CancelableRequest<T = any> {
+  promise: Promise<{ data: T | null; error: ApiError | null; status?: number; raw?: any }>;
+  cancel: () => void;
 }
 
 // useApi hook return
 export interface UseApiReturn<T = any> extends UseApiState<T> {
-  get: (url: string, config?: ApiRequestConfig) => CancelableRequest;
-  post: (url: string, data?: any, config?: ApiRequestConfig) => CancelableRequest;
-  put: (url: string, data?: any, config?: ApiRequestConfig) => CancelableRequest;
-  patch: (url: string, data?: any, config?: ApiRequestConfig) => CancelableRequest;
-  del: (url: string, config?: ApiRequestConfig) => CancelableRequest;
+  get: (url: string, config?: Partial<ApiRequestConfig>) => CancelableRequest<T>;
+  post: (url: string, data?: any, config?: Partial<ApiRequestConfig>) => CancelableRequest<T>;
+  put: (url: string, data?: any, config?: Partial<ApiRequestConfig>) => CancelableRequest<T>;
+  patch: (url: string, data?: any, config?: Partial<ApiRequestConfig>) => CancelableRequest<T>;
+  del: (url: string, config?: Partial<ApiRequestConfig>) => CancelableRequest<T>;
   reset: () => void;
 }
 
@@ -78,9 +103,14 @@ export interface ApiKitConfig {
   engine?: 'fetch' | 'axios' | ApiEngine;
   tokenStorage?: TokenStorage;
   onUnauthorized?: () => void;
+  refreshToken?: () => Promise<string | null>;
+  onTokenRefreshFailed?: () => void;
   retry?: number;
+  retryAfter429?: boolean;
+  maxRetryDelay?: number;
   timeout?: number;
   headers?: Record<string, string>;
+  debug?: boolean;
   // Interceptors
   onRequest?: (config: ApiRequestConfig) => Promise<ApiRequestConfig> | ApiRequestConfig;
   onResponse?: (response: ApiResponse) => Promise<ApiResponse> | ApiResponse;
@@ -88,4 +118,59 @@ export interface ApiKitConfig {
   // Caching
   cache?: ApiCache;
 }
+
+// AI Streaming config & return
+export interface AiStreamConfig {
+  method?: 'GET' | 'POST';
+  headers?: Record<string, string>;
+  body?: any;
+  mode?: 'sse' | 'text' | 'openai';
+  onToken?: (token: string, accumulated: string) => void;
+  onComplete?: (accumulated: string) => void;
+  onError?: (error: ApiError) => void;
+  signal?: AbortSignal;
+}
+
+export interface UseAiStreamReturn<T = string> {
+  text: string;
+  data: T | null;
+  isStreaming: boolean;
+  error: ApiError | null;
+  tokensCount: number;
+  stream: (url: string, config?: AiStreamConfig) => Promise<string>;
+  stop: () => void;
+  reset: () => void;
+}
+
+// Offline mutation representation
+export interface OfflineMutation {
+  id: string;
+  url: string;
+  method: ApiMethod;
+  data?: any;
+  headers?: Record<string, string>;
+  timestamp: number;
+  retryCount: number;
+}
+
+// Offline Queue sync result
+export interface OfflineSyncResult {
+  mutation: OfflineMutation;
+  success: boolean;
+  response?: any;
+  error?: ApiError;
+}
+
+// Standalone API Client instance
+export interface ApiClientInstance {
+  config: ApiKitConfig;
+  get<T = any>(url: string, config?: Partial<ApiRequestConfig>): Promise<{ data: T | null; error: ApiError | null; status?: number; raw?: any }>;
+  post<T = any>(url: string, data?: any, config?: Partial<ApiRequestConfig>): Promise<{ data: T | null; error: ApiError | null; status?: number; raw?: any }>;
+  put<T = any>(url: string, data?: any, config?: Partial<ApiRequestConfig>): Promise<{ data: T | null; error: ApiError | null; status?: number; raw?: any }>;
+  patch<T = any>(url: string, data?: any, config?: Partial<ApiRequestConfig>): Promise<{ data: T | null; error: ApiError | null; status?: number; raw?: any }>;
+  del<T = any>(url: string, config?: Partial<ApiRequestConfig>): Promise<{ data: T | null; error: ApiError | null; status?: number; raw?: any }>;
+  request<T = any>(config: ApiRequestConfig): Promise<{ data: T | null; error: ApiError | null; status?: number; raw?: any }>;
+  upload<T = any>(url: string, formData: any, config?: Partial<ApiRequestConfig>): Promise<{ data: T | null; error: ApiError | null; status?: number; raw?: any }>;
+}
+
 

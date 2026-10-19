@@ -10,8 +10,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.useApi = useApi;
+exports.usePaginatedApi = usePaginatedApi;
 const react_1 = require("react");
-const config_1 = require("../config");
+const plainApiClient_1 = require("../plainApiClient");
 function useApi() {
     const [state, setState] = (0, react_1.useState)({
         loading: false,
@@ -25,112 +26,108 @@ function useApi() {
             data: null,
         });
     }, []);
+    const abortControllers = (0, react_1.useRef)({});
     const makeRequest = (0, react_1.useCallback)((method, url, data, config) => __awaiter(this, void 0, void 0, function* () {
-        var _a, _b, _c, _d, _e;
-        const apiConfig = (0, config_1.getApiKitConfig)();
-        const engine = (0, config_1.getEngine)();
-        if (!apiConfig.baseUrl) {
-            console.warn('ApiKit: baseUrl not configured. Please call configureApiKit first.');
-            return;
-        }
         setState(prev => (Object.assign(Object.assign({}, prev), { loading: true, error: null })));
-        try {
-            // Get token if storage is configured
-            let token = null;
-            if (apiConfig.tokenStorage) {
-                try {
-                    token = yield apiConfig.tokenStorage.getToken();
-                }
-                catch (error) {
-                    console.warn('ApiKit: Failed to get token from storage:', error);
-                }
-            }
-            // Prepare headers
-            const headers = Object.assign(Object.assign({ 'Content-Type': 'application/json' }, apiConfig.headers), config === null || config === void 0 ? void 0 : config.headers);
-            if (token) {
-                headers.Authorization = `Bearer ${token}`;
-            }
-            // Build full URL
-            const fullUrl = url.startsWith('http') ? url : `${apiConfig.baseUrl}${url}`;
-            // Add query parameters
-            let finalUrl = fullUrl;
-            if (config === null || config === void 0 ? void 0 : config.params) {
-                const params = new URLSearchParams();
-                Object.entries(config.params).forEach(([key, value]) => {
-                    if (value !== undefined && value !== null) {
-                        params.append(key, String(value));
-                    }
-                });
-                const queryString = params.toString();
-                if (queryString) {
-                    finalUrl += (fullUrl.includes('?') ? '&' : '?') + queryString;
-                }
-            }
-            // Prepare request config
-            const requestConfig = {
-                url: finalUrl,
-                method,
-                data: method !== 'GET' ? data : undefined,
-                headers,
-                timeout: (config === null || config === void 0 ? void 0 : config.timeout) || apiConfig.timeout,
-                signal: config === null || config === void 0 ? void 0 : config.signal,
-            };
-            // Make request
-            const response = yield engine.request(requestConfig);
-            // Handle 401 globally
-            if (response.status === 401 && apiConfig.onUnauthorized) {
-                apiConfig.onUnauthorized();
-            }
-            setState({
-                loading: false,
-                error: null,
-                data: response.data,
-            });
+        // Setup AbortController
+        let controller;
+        let signal = config === null || config === void 0 ? void 0 : config.signal;
+        if (!signal && typeof AbortController !== 'undefined') {
+            controller = new AbortController();
+            signal = controller.signal;
+            abortControllers.current[url] = controller;
         }
-        catch (error) {
-            let apiError;
-            if (error.name === 'AbortError') {
-                apiError = {
-                    message: 'Request cancelled',
-                    isNetworkError: false,
-                };
-            }
-            else if ((_a = error.message) === null || _a === void 0 ? void 0 : _a.includes('Network request failed')) {
-                apiError = {
-                    message: 'No internet connection',
-                    isNetworkError: true,
-                };
-            }
-            else if (error.code === 'ECONNABORTED' || ((_b = error.message) === null || _b === void 0 ? void 0 : _b.includes('timeout'))) {
-                apiError = {
-                    message: 'Request timeout',
-                    isTimeout: true,
-                };
-            }
-            else {
-                apiError = {
-                    message: error.message || 'An error occurred',
-                    status: (_c = error.response) === null || _c === void 0 ? void 0 : _c.status,
-                    details: (_d = error.response) === null || _d === void 0 ? void 0 : _d.data,
-                    isUnauthorized: ((_e = error.response) === null || _e === void 0 ? void 0 : _e.status) === 401,
-                };
-            }
-            setState({
-                loading: false,
-                error: apiError,
-                data: null,
-            });
+        const result = yield (0, plainApiClient_1.executeRequest)(method, url, data, Object.assign(Object.assign({}, config), { signal }));
+        if (controller) {
+            delete abortControllers.current[url];
         }
+        setState({
+            loading: false,
+            error: result.error,
+            data: result.data,
+        });
+        return result;
     }), []);
-    const get = (0, react_1.useCallback)((url, config) => makeRequest('GET', url, undefined, config), [makeRequest]);
-    const post = (0, react_1.useCallback)((url, data, config) => makeRequest('POST', url, data, config), [makeRequest]);
-    const put = (0, react_1.useCallback)((url, data, config) => makeRequest('PUT', url, data, config), [makeRequest]);
-    const patch = (0, react_1.useCallback)((url, data, config) => makeRequest('PATCH', url, data, config), [makeRequest]);
-    const del = (0, react_1.useCallback)((url, config) => makeRequest('DELETE', url, undefined, config), [makeRequest]);
-    return Object.assign(Object.assign({}, state), { get,
-        post,
-        put,
-        patch,
-        del,
-        reset });
+    // Helper to wrap each method to return cancel and strongly typed result
+    function withCancel(fn) {
+        return (...args) => {
+            const url = args[0];
+            let controller;
+            if (abortControllers.current[url]) {
+                controller = abortControllers.current[url];
+            }
+            const promise = fn(...args);
+            return {
+                promise,
+                cancel: () => controller === null || controller === void 0 ? void 0 : controller.abort(),
+            };
+        };
+    }
+    return Object.assign(Object.assign({}, state), { get: withCancel((url, config) => makeRequest('GET', url, undefined, config)), post: withCancel((url, data, config) => makeRequest('POST', url, data, config)), put: withCancel((url, data, config) => makeRequest('PUT', url, data, config)), patch: withCancel((url, data, config) => makeRequest('PATCH', url, data, config)), del: withCancel((url, config) => makeRequest('DELETE', url, undefined, config)), reset });
+}
+// Paginated API hook
+function usePaginatedApi(url, { pageSize = 20, initialPage = 1, params = {}, pageParamName = 'page', pageSizeParamName = 'pageSize', config, } = {}) {
+    const [page, setPage] = (0, react_1.useState)(initialPage);
+    const [data, setData] = (0, react_1.useState)([]);
+    const [loading, setLoading] = (0, react_1.useState)(false);
+    const [error, setError] = (0, react_1.useState)(null);
+    const [hasMore, setHasMore] = (0, react_1.useState)(true);
+    const fetchPage = (pageNum_1, ...args_1) => __awaiter(this, [pageNum_1, ...args_1], void 0, function* (pageNum, isRefresh = false) {
+        setLoading(true);
+        setError(null);
+        try {
+            const queryParams = Object.assign(Object.assign({}, params), { [pageParamName]: pageNum, [pageSizeParamName]: pageSize });
+            const result = yield (0, plainApiClient_1.executeRequest)('GET', url, undefined, Object.assign(Object.assign({}, config), { params: queryParams }));
+            if (result.error) {
+                setError(result.error);
+                return;
+            }
+            // Handle raw array or nested items (e.g. { results: [] } or { data: [] })
+            let items = [];
+            const resData = result.data;
+            if (Array.isArray(resData)) {
+                items = resData;
+            }
+            else if (resData && Array.isArray(resData.data)) {
+                items = resData.data;
+            }
+            else if (resData && Array.isArray(resData.results)) {
+                items = resData.results;
+            }
+            else if (resData && Array.isArray(resData.items)) {
+                items = resData.items;
+            }
+            setData(prev => (pageNum === 1 || isRefresh ? items : [...prev, ...items]));
+            setHasMore(items.length >= pageSize);
+        }
+        catch (err) {
+            setError({ message: err.message || 'An error occurred' });
+        }
+        finally {
+            setLoading(false);
+        }
+    });
+    (0, react_1.useEffect)(() => {
+        fetchPage(page);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page, url, JSON.stringify(params)]);
+    const nextPage = () => {
+        if (hasMore && !loading)
+            setPage(p => p + 1);
+    };
+    const prevPage = () => {
+        if (page > 1 && !loading)
+            setPage(p => p - 1);
+    };
+    const refresh = () => {
+        setPage(initialPage);
+        fetchPage(initialPage, true);
+    };
+    const reset = () => {
+        setPage(initialPage);
+        setData([]);
+        setHasMore(true);
+        setError(null);
+    };
+    return { page, data, loading, error, hasMore, nextPage, prevPage, refresh, reset };
 }

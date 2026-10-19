@@ -13,34 +13,63 @@ exports.fetchEngine = void 0;
 exports.fetchEngine = {
     request(config) {
         return __awaiter(this, void 0, void 0, function* () {
-            // TODO: Support timeout, cancel, params serialization, and smart response parsing
-            const { url, method = 'GET', data, headers, signal } = config;
-            const fetchConfig = {
-                method,
-                headers,
-                body: data ? JSON.stringify(data) : undefined,
-                signal,
-            };
-            const response = yield fetch(url, fetchConfig);
-            // TODO: Smart response parsing (JSON, text, FormData, binary)
-            const contentType = response.headers.get('content-type') || '';
-            let parsed;
-            if (contentType.includes('application/json')) {
-                parsed = yield response.json();
+            const { url, method = 'GET', data, headers, signal, timeout } = config;
+            // Setup internal timeout signal if timeout is set and no external signal provided
+            let timeoutId = null;
+            let effectiveSignal = signal;
+            if (timeout && !signal && typeof AbortController !== 'undefined') {
+                const controller = new AbortController();
+                effectiveSignal = controller.signal;
+                timeoutId = setTimeout(() => controller.abort(), timeout);
             }
-            else if (contentType.includes('text/')) {
-                parsed = yield response.text();
+            try {
+                const fetchConfig = {
+                    method,
+                    headers,
+                    body: data !== undefined && method !== 'GET'
+                        ? (typeof data === 'string' ? data : JSON.stringify(data))
+                        : undefined,
+                    signal: effectiveSignal,
+                };
+                const response = yield fetch(url, fetchConfig);
+                if (timeoutId)
+                    clearTimeout(timeoutId);
+                // Smart response parsing
+                const contentType = response.headers.get('content-type') || '';
+                let parsed;
+                if (contentType.includes('application/json')) {
+                    parsed = yield response.json();
+                }
+                else if (contentType.includes('text/')) {
+                    parsed = yield response.text();
+                }
+                else {
+                    try {
+                        parsed = yield response.json();
+                    }
+                    catch (_a) {
+                        parsed = yield response.text();
+                    }
+                }
+                // Parse headers into dictionary
+                const parsedHeaders = {};
+                if (response.headers && typeof response.headers.forEach === 'function') {
+                    response.headers.forEach((val, key) => {
+                        parsedHeaders[key.toLowerCase()] = val;
+                    });
+                }
+                return {
+                    data: parsed,
+                    status: response.status,
+                    headers: parsedHeaders,
+                    raw: response,
+                };
             }
-            else {
-                parsed = yield response.blob();
+            catch (error) {
+                if (timeoutId)
+                    clearTimeout(timeoutId);
+                throw error;
             }
-            return {
-                data: parsed,
-                status: response.status,
-                headers: {}, // TODO: parse headers
-                raw: response,
-            };
         });
     },
-    // TODO: cancel support (AbortController)
 };

@@ -5,22 +5,32 @@ exports.getApiKitConfig = getApiKitConfig;
 exports.getEngine = getEngine;
 const fetchEngine_1 = require("./engine/fetchEngine");
 const axiosEngine_1 = require("./engine/axiosEngine");
+const logger_1 = require("./utils/logger");
+const offlineQueue_1 = require("./offline/offlineQueue");
 let apiKitConfig = {
     baseUrl: '',
     engine: 'fetch',
     retry: 0,
+    retryAfter429: true,
     timeout: 10000,
     headers: {},
+    debug: false,
 };
 let currentEngine = fetchEngine_1.fetchEngine;
 function configureApiKit(config) {
     apiKitConfig = Object.assign(Object.assign({}, apiKitConfig), config);
+    if (config.debug !== undefined) {
+        (0, logger_1.setDebugMode)(config.debug);
+    }
+    if (config.tokenStorage) {
+        offlineQueue_1.offlineQueue.setStorage(config.tokenStorage);
+    }
     // Set the engine based on config
     if (config.engine === 'axios') {
         try {
             currentEngine = axiosEngine_1.axiosEngine;
         }
-        catch (error) {
+        catch (_a) {
             console.warn('ApiKit: axios not installed. Falling back to fetch engine. Install axios: npm install axios');
             currentEngine = fetchEngine_1.fetchEngine;
         }

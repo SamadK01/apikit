@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.asyncStorageToken = void 0;
+exports.memoryCache = exports.asyncStorageToken = void 0;
 const TOKEN_KEY = 'apikit_token';
 exports.asyncStorageToken = {
     getToken() {
@@ -49,4 +49,27 @@ exports.asyncStorageToken = {
             }
         });
     },
+};
+function now() { return Date.now(); }
+const _store = {};
+exports.memoryCache = {
+    get(key) {
+        const entry = _store[key];
+        if (!entry)
+            return undefined;
+        if (entry.expiresAt < now()) {
+            delete _store[key];
+            return undefined;
+        }
+        return entry.value;
+    },
+    set(key, value, ttlMs = 60000) {
+        _store[key] = { value, expiresAt: now() + ttlMs };
+    },
+    clear(key) {
+        if (key)
+            delete _store[key];
+        else
+            Object.keys(_store).forEach(k => delete _store[k]);
+    }
 };
