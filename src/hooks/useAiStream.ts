@@ -115,6 +115,7 @@ export function useAiStream<T = string>(): UseAiStreamReturn<T> {
     return new Promise<string>((resolve, reject) => {
       let accumulated = '';
       let lastSeenLength = 0;
+      let pendingSse = '';
 
       // Handle abort signal from config
       if (config?.signal) {
@@ -146,7 +147,8 @@ export function useAiStream<T = string>(): UseAiStreamReturn<T> {
           config?.onToken?.(newChunk, accumulated);
         } else {
           // SSE mode or OpenAI mode
-          const lines = newChunk.split('\n');
+          const lines = (pendingSse + newChunk).split(/\r?\n/);
+          pendingSse = lines.pop() || '';
           for (const line of lines) {
             const tokenText = parseSseLine(line);
             if (tokenText) {
@@ -156,6 +158,18 @@ export function useAiStream<T = string>(): UseAiStreamReturn<T> {
               config?.onToken?.(tokenText, accumulated);
             }
           }
+        }
+      };
+
+      const flushPendingSse = () => {
+        if (mode === 'text' || !pendingSse) return;
+        const tokenText = parseSseLine(pendingSse);
+        pendingSse = '';
+        if (tokenText) {
+          accumulated += tokenText;
+          setText(accumulated);
+          setTokensCount(estimateAiTokens(accumulated));
+          config?.onToken?.(tokenText, accumulated);
         }
       };
 
@@ -181,6 +195,7 @@ export function useAiStream<T = string>(): UseAiStreamReturn<T> {
             const remaining = currentText.substring(lastSeenLength);
             handleIncomingChunk(remaining);
           }
+          flushPendingSse();
         } catch {
           // Ignore
         }
@@ -242,6 +257,7 @@ export function useAiStream<T = string>(): UseAiStreamReturn<T> {
     data,
     isStreaming,
     error,
+    tokenCount: tokensCount,
     tokensCount,
     stream,
     stop,

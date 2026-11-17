@@ -1,187 +1,94 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { UseApiReturn, ApiRequestConfig, ApiError, CancelableRequest } from '../types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ApiError, ApiRequestConfig, CancelableRequest, PaginationResult, UseApiReturn, UsePaginatedApiOptions, UsePaginatedApiReturn } from '../types';
 import { executeRequest } from '../plainApiClient';
-import { getApiKitConfig } from '../config';
+
+type Result<T> = { data: T | null; error: ApiError | null; status?: number; raw?: any };
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export function useApi<T = any>(): UseApiReturn<T> {
-  const [state, setState] = useState<{
-    loading: boolean;
-    error: ApiError | null;
-    data: T | null;
-  }>({
-    loading: false,
-    error: null,
-    data: null,
-  });
+  const [state, setState] = useState({ loading: false, error: null as ApiError | null, data: null as T | null });
+  const controllers = useRef(new Set<AbortController>());
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; controllers.current.forEach(controller => controller.abort()); controllers.current.clear(); }, []);
 
-  const reset = useCallback(() => {
-    setState({
-      loading: false,
-      error: null,
-      data: null,
-    });
+  const request = useCallback((method: Method, url: string, data?: unknown, config?: Partial<ApiRequestConfig>): CancelableRequest<T> => {
+    const controller = !config?.signal && typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    if (controller) controllers.current.add(controller);
+    if (mounted.current) setState(previous => ({ ...previous, loading: true, error: null }));
+    const promise: Promise<Result<T>> = executeRequest<T>(method, url, data, { ...config, signal: config?.signal || controller?.signal })
+      .then(result => { if (mounted.current) setState({ loading: false, error: result.error, data: result.data }); return result; })
+      .finally(() => { if (controller) controllers.current.delete(controller); });
+    return { promise, cancel: () => controller?.abort() };
   }, []);
-
-  const abortControllers = useRef<Record<string, AbortController>>({});
-
-  const makeRequest = useCallback(async (
-    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
-    url: string,
-    data?: any,
-    config?: Partial<ApiRequestConfig>
-  ): Promise<{ data: T | null; error: ApiError | null; status?: number; raw?: any }> => {
-    setState(prev => ({ ...prev, loading: true, error: null }));
-
-    // Setup AbortController
-    let controller: AbortController | undefined;
-    let signal: AbortSignal | undefined = config?.signal;
-    if (!signal && typeof AbortController !== 'undefined') {
-      controller = new AbortController();
-      signal = controller.signal;
-      abortControllers.current[url] = controller;
-    }
-
-    const result = await executeRequest<T>(
-      method,
-      url,
-      data,
-      { ...config, signal }
-    );
-
-    if (controller) {
-      delete abortControllers.current[url];
-    }
-
-    setState({
-      loading: false,
-      error: result.error,
-      data: result.data,
-    });
-
-    return result;
-  }, []);
-
-  // Helper to wrap each method to return cancel and strongly typed result
-  function withCancel(fn: (...args: any[]) => Promise<any>) {
-    return (...args: any[]): CancelableRequest<T> => {
-      const url = args[0];
-      let controller: AbortController | undefined;
-      if (abortControllers.current[url]) {
-        controller = abortControllers.current[url];
-      }
-      const promise = fn(...args);
-      return {
-        promise,
-        cancel: () => controller?.abort(),
-      };
-    };
-  }
 
   return {
     ...state,
-    get: withCancel((url: string, config?: Partial<ApiRequestConfig>) => makeRequest('GET', url, undefined, config)),
-    post: withCancel((url: string, data?: any, config?: Partial<ApiRequestConfig>) => makeRequest('POST', url, data, config)),
-    put: withCancel((url: string, data?: any, config?: Partial<ApiRequestConfig>) => makeRequest('PUT', url, data, config)),
-    patch: withCancel((url: string, data?: any, config?: Partial<ApiRequestConfig>) => makeRequest('PATCH', url, data, config)),
-    del: withCancel((url: string, config?: Partial<ApiRequestConfig>) => makeRequest('DELETE', url, undefined, config)),
-    reset,
+    get: (url, config) => request('GET', url, undefined, config),
+    post: (url, data, config) => request('POST', url, data, config),
+    put: (url, data, config) => request('PUT', url, data, config),
+    patch: (url, data, config) => request('PATCH', url, data, config),
+    del: (url, config) => request('DELETE', url, undefined, config),
+    reset: () => { if (mounted.current) setState({ loading: false, error: null, data: null }); },
   };
 }
 
-export interface UsePaginatedApiOptions {
-  pageSize?: number;
-  initialPage?: number;
-  params?: Record<string, any>;
-  pageParamName?: string;
-  pageSizeParamName?: string;
-  config?: Partial<ApiRequestConfig>;
+function defaultPage<T>(response: unknown): PaginationResult<T> {
+  if (Array.isArray(response)) return { items: response as T[] };
+  const value = (response || {}) as Record<string, any>;
+  const items = Array.isArray(value.items) ? value.items : Array.isArray(value.data) ? value.data : Array.isArray(value.results) ? value.results : [];
+  const meta = value.meta || value.pagination || {};
+  return { items, hasMore: typeof value.hasMore === 'boolean' ? value.hasMore : typeof meta.hasMore === 'boolean' ? meta.hasMore : undefined, nextCursor: value.nextCursor ?? value.next_cursor ?? meta.nextCursor ?? meta.next_cursor ?? null };
 }
 
-// Paginated API hook
-export function usePaginatedApi<T = any>(
-  url: string,
-  {
-    pageSize = 20,
-    initialPage = 1,
-    params = {},
-    pageParamName = 'page',
-    pageSizeParamName = 'pageSize',
-    config,
-  }: UsePaginatedApiOptions = {}
-) {
-  const [page, setPage] = useState(initialPage);
+/** Infinite pagination for offset/page APIs and cursor APIs. */
+export function usePaginatedApi<T = any>(url: string, options: UsePaginatedApiOptions<T> = {}): UsePaginatedApiReturn<T> {
+  const { mode = 'offset', pageSize = 20, initialPage = 1, initialCursor = null, params = {}, pageParamName = 'page', cursorParamName = 'cursor', pageSizeParamName = 'limit', config, getPage = defaultPage<T> } = options;
   const [data, setData] = useState<T[]>([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(initialPage);
+  const [nextCursor, setNextCursor] = useState<string | number | null>(initialCursor);
+  const state = useRef({ page: initialPage, cursor: initialCursor as string | number | null, hasMore: true, requestId: 0, busy: false });
+  const mounted = useRef(true);
+  const configRef = useRef(config);
+  const getPageRef = useRef(getPage);
+  configRef.current = config;
+  getPageRef.current = getPage;
+  const paramsKey = JSON.stringify(params);
+  useEffect(() => () => { mounted.current = false; }, []);
 
-  const fetchPage = async (pageNum: number, isRefresh: boolean = false) => {
-    setLoading(true);
+  const fetchPage = useCallback(async (kind: 'initial' | 'more' | 'refresh') => {
+    if (kind === 'more' && (!state.current.hasMore || state.current.busy)) return;
+    const requestId = ++state.current.requestId;
+    state.current.busy = true;
+    if (kind === 'more') setIsLoadingMore(true); else if (kind === 'refresh') setIsRefreshing(true); else setIsLoading(true);
     setError(null);
-
-    try {
-      const queryParams = {
-        ...params,
-        [pageParamName]: pageNum,
-        [pageSizeParamName]: pageSize,
-      };
-
-      const result = await executeRequest<any>('GET', url, undefined, {
-        ...config,
-        params: queryParams,
-      });
-
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
-
-      // Handle raw array or nested items (e.g. { results: [] } or { data: [] })
-      let items: T[] = [];
-      const resData = result.data;
-      if (Array.isArray(resData)) {
-        items = resData;
-      } else if (resData && Array.isArray(resData.data)) {
-        items = resData.data;
-      } else if (resData && Array.isArray(resData.results)) {
-        items = resData.results;
-      } else if (resData && Array.isArray(resData.items)) {
-        items = resData.items;
-      }
-
-      setData(prev => (pageNum === 1 || isRefresh ? items : [...prev, ...items]));
-      setHasMore(items.length >= pageSize);
-    } catch (err: any) {
-      setError({ message: err.message || 'An error occurred' });
-    } finally {
-      setLoading(false);
+    const first = kind !== 'more';
+    const targetPage = first ? initialPage : state.current.page + 1;
+    const targetCursor = first ? initialCursor : state.current.cursor;
+    const requestParams: Record<string, unknown> = { ...params, [pageSizeParamName]: pageSize };
+    if (mode === 'cursor') { if (targetCursor !== null && targetCursor !== undefined) requestParams[cursorParamName] = targetCursor; }
+    else requestParams[pageParamName] = targetPage;
+    const result = await executeRequest<unknown>('GET', url, undefined, { ...configRef.current, params: requestParams });
+    if (!mounted.current || requestId !== state.current.requestId) return;
+    if (result.error) setError(result.error);
+    else {
+      const resolved = getPageRef.current(result.data);
+      const more = resolved.hasMore ?? (mode === 'cursor' ? resolved.nextCursor !== null && resolved.nextCursor !== undefined : resolved.items.length >= pageSize);
+      setData(previous => first ? resolved.items : [...previous, ...resolved.items]);
+      setHasMore(more); setPage(targetPage); setNextCursor(resolved.nextCursor ?? null);
+      state.current = { ...state.current, page: targetPage, cursor: resolved.nextCursor ?? null, hasMore: more, busy: false };
     }
-  };
+    state.current.busy = false;
+    if (mounted.current && requestId === state.current.requestId) { setIsLoading(false); setIsLoadingMore(false); setIsRefreshing(false); }
+  }, [cursorParamName, initialCursor, initialPage, mode, pageParamName, pageSize, pageSizeParamName, paramsKey, url]);
 
-  useEffect(() => {
-    fetchPage(page);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, url, JSON.stringify(params)]);
-
-  const nextPage = () => {
-    if (hasMore && !loading) setPage(p => p + 1);
-  };
-
-  const prevPage = () => {
-    if (page > 1 && !loading) setPage(p => p - 1);
-  };
-
-  const refresh = () => {
-    setPage(initialPage);
-    fetchPage(initialPage, true);
-  };
-
-  const reset = () => {
-    setPage(initialPage);
-    setData([]);
-    setHasMore(true);
-    setError(null);
-  };
-
-  return { page, data, loading, error, hasMore, nextPage, prevPage, refresh, reset };
+  useEffect(() => { void fetchPage('initial'); }, [fetchPage]);
+  const loadMore = useCallback(async () => { await fetchPage('more'); }, [fetchPage]);
+  const refresh = useCallback(async () => { await fetchPage('refresh'); }, [fetchPage]);
+  const reset = useCallback(() => { state.current = { page: initialPage, cursor: initialCursor, hasMore: true, requestId: state.current.requestId + 1, busy: false }; setData([]); setError(null); setHasMore(true); setPage(initialPage); setNextCursor(initialCursor); }, [initialCursor, initialPage]);
+  return { data, error, hasMore, isLoading, isLoadingMore, isRefreshing, page, nextCursor, loadMore, nextPage: loadMore, refresh, reset };
 }

@@ -30,6 +30,8 @@ export interface ApiRequestConfig {
     skipCache?: boolean;
     onUploadProgress?: (progress: UploadProgress) => void;
     offlineQueue?: boolean;
+    idempotencyKey?: string;
+    retryUnsafe?: boolean;
 }
 export interface ApiResponse<T = any> {
     data: T;
@@ -56,6 +58,12 @@ export interface TokenStorage {
     getToken(): Promise<string | null>;
     setToken(token: string): Promise<void>;
     removeToken(): Promise<void>;
+}
+/** A small key/value store used by the offline queue. */
+export interface KeyValueStorage {
+    getItem(key: string): Promise<string | null> | string | null;
+    setItem(key: string, value: string): Promise<void> | void;
+    removeItem(key: string): Promise<void> | void;
 }
 export interface UseApiState<T = any> {
     loading: boolean;
@@ -101,6 +109,47 @@ export interface ApiKitConfig {
     onResponse?: (response: ApiResponse) => Promise<ApiResponse> | ApiResponse;
     onError?: (error: ApiError) => Promise<ApiError> | ApiError;
     cache?: ApiCache;
+    /** Persistence used only for queued offline mutations. */
+    offlineStorage?: KeyValueStorage;
+    /** Prefix cache entries by user/account to prevent cross-account reads. */
+    cacheNamespace?: string;
+    offlineMaxRetries?: number;
+}
+export type PaginationMode = 'offset' | 'cursor';
+export interface PaginationResult<T> {
+    items: T[];
+    /** Set this to false explicitly when the server has no further page. */
+    hasMore?: boolean;
+    /** Cursor to send with the next cursor-based request. */
+    nextCursor?: string | number | null;
+}
+export interface UsePaginatedApiOptions<T> {
+    mode?: PaginationMode;
+    pageSize?: number;
+    initialPage?: number;
+    initialCursor?: string | number | null;
+    params?: Record<string, unknown>;
+    pageParamName?: string;
+    cursorParamName?: string;
+    pageSizeParamName?: string;
+    config?: Partial<ApiRequestConfig>;
+    /** Maps any API response shape to the standard pagination shape. */
+    getPage?: (response: unknown) => PaginationResult<T>;
+}
+export interface UsePaginatedApiReturn<T> {
+    data: T[];
+    error: ApiError | null;
+    hasMore: boolean;
+    isLoading: boolean;
+    isLoadingMore: boolean;
+    isRefreshing: boolean;
+    page: number;
+    nextCursor: string | number | null;
+    loadMore: () => Promise<void>;
+    refresh: () => Promise<void>;
+    reset: () => void;
+    /** Backward-compatible alias for `loadMore`. */
+    nextPage: () => Promise<void>;
 }
 export interface AiStreamConfig {
     method?: 'GET' | 'POST';
@@ -117,9 +166,47 @@ export interface UseAiStreamReturn<T = string> {
     data: T | null;
     isStreaming: boolean;
     error: ApiError | null;
+    tokenCount: number;
+    /** @deprecated Use tokenCount. */
     tokensCount: number;
     stream: (url: string, config?: AiStreamConfig) => Promise<string>;
     stop: () => void;
+    reset: () => void;
+}
+/** Schema validators may optionally expose JSON Schema for LLM tool definitions. */
+export interface AgentToolSchema<T> extends SchemaValidator<T> {
+    toJSONSchema?: () => Record<string, unknown>;
+    jsonSchema?: Record<string, unknown>;
+}
+export interface AgentToolTelemetry {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+    requestId?: string;
+    provider?: string;
+}
+export interface AgentToolOptions<TArgs> {
+    endpoint: string;
+    name: string;
+    description: string;
+    schema: AgentToolSchema<TArgs>;
+    headers?: Record<string, string>;
+    /** One correction attempt is used by default when returned tool arguments are invalid. */
+    maxCorrectionAttempts?: number;
+}
+export interface AgentToolResult<TArgs> {
+    data: TArgs | null;
+    error: ApiError | null;
+    telemetry: AgentToolTelemetry;
+    attempts: number;
+    raw?: unknown;
+}
+export interface UseAgentToolReturn<TArgs> {
+    data: TArgs | null;
+    error: ApiError | null;
+    isExecuting: boolean;
+    telemetry: AgentToolTelemetry | null;
+    execute: (input: unknown, config?: Partial<ApiRequestConfig>) => Promise<AgentToolResult<TArgs>>;
     reset: () => void;
 }
 export interface OfflineMutation {
@@ -130,6 +217,7 @@ export interface OfflineMutation {
     headers?: Record<string, string>;
     timestamp: number;
     retryCount: number;
+    idempotencyKey?: string;
 }
 export interface OfflineSyncResult {
     mutation: OfflineMutation;
@@ -182,3 +270,5 @@ export interface ApiClientInstance {
         raw?: any;
     }>;
 }
+/** Public name for a configured, non-React ApiKit client. */
+export type ApiClient = ApiClientInstance;

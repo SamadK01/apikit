@@ -1,4 +1,4 @@
-import { TokenStorage } from '../types';
+import { KeyValueStorage, TokenStorage } from '../types';
 
 const TOKEN_KEY = 'apikit_token';
 
@@ -30,6 +30,18 @@ export const asyncStorageToken: TokenStorage = {
       console.warn('ApiKit: @react-native-async-storage/async-storage not installed. Please install it: npm install @react-native-async-storage/async-storage');
       return null;
     }
+  },
+};
+
+export const asyncStorage: KeyValueStorage = {
+  async getItem(key) {
+    try { return await require('@react-native-async-storage/async-storage').default.getItem(key); } catch { return null; }
+  },
+  async setItem(key, value) {
+    try { await require('@react-native-async-storage/async-storage').default.setItem(key, value); } catch { /* unavailable storage */ }
+  },
+  async removeItem(key) {
+    try { await require('@react-native-async-storage/async-storage').default.removeItem(key); } catch { /* unavailable storage */ }
   },
 };
 

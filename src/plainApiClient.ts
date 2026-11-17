@@ -5,7 +5,20 @@ import { parseRetryAfter, calculateBackoffWithJitter } from './utils/rateLimit';
 import { uploadFile } from './utils/uploader';
 import { offlineQueue } from './offline/offlineQueue';
 
-let tokenRefreshPromise: Promise<string | null> | null = null;
+const tokenRefreshPromises = new WeakMap<ApiKitConfig, Promise<string | null>>();
+
+function cacheKeyFor(url: string, params: Record<string, any> | undefined, namespace?: string): string {
+  const query = Object.entries(params || {})
+    .filter(([, value]) => value !== undefined && value !== null)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
+    .join('&');
+  return `${namespace || 'public'}:${url}${query ? `?${query}` : ''}`;
+}
+
+function canRetry(method: string, config: Partial<ApiRequestConfig>): boolean {
+  return method === 'GET' || method === 'PUT' || method === 'DELETE' || Boolean(config.retryUnsafe && config.idempotencyKey);
+}
 
 export async function executeRequest<T = any>(
   methodOrConfig: ApiRequestConfig | string,
@@ -56,12 +69,7 @@ export async function executeRequest<T = any>(
   const isGet = method === 'GET';
   let cacheKey = '';
   if (isGet && apiConfig.cache && !finalConfig.skipCache) {
-    let rawUrl = url;
-    let params = finalConfig.params;
-    cacheKey = rawUrl;
-    if (params) {
-      cacheKey += '?' + Object.entries(params).map(([k, v]) => `${k}=${v}`).join('&');
-    }
+    cacheKey = cacheKeyFor(url, finalConfig.params, apiConfig.cacheNamespace);
     const cached = await apiConfig.cache.get<{ data: T; status: number; raw?: any }>(cacheKey);
     if (cached) {
       return { data: cached.data, error: null, status: cached.status, raw: cached.raw };
@@ -84,14 +92,18 @@ export async function executeRequest<T = any>(
 
       // 2. Prepare headers
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
         ...apiConfig.headers,
         ...finalConfig.headers,
       };
 
+      if (body !== undefined && typeof body !== 'string' && !(typeof FormData !== 'undefined' && body instanceof FormData) && !Object.keys(headers).some(key => key.toLowerCase() === 'content-type')) {
+        headers['Content-Type'] = 'application/json';
+      }
+
       if (token) {
         headers.Authorization = `Bearer ${token}`;
       }
+      if (finalConfig.idempotencyKey && !headers['Idempotency-Key']) headers['Idempotency-Key'] = finalConfig.idempotencyKey;
 
       // 3. Build full URL
       const fullUrl = url.startsWith('http://') || url.startsWith('https://') 
@@ -117,7 +129,7 @@ export async function executeRequest<T = any>(
         method,
         data: method !== 'GET' ? body : undefined,
         headers,
-        timeout: finalConfig.timeout || apiConfig.timeout,
+        timeout: finalConfig.timeout ?? apiConfig.timeout,
         signal: finalConfig.signal,
       };
 
@@ -143,11 +155,13 @@ export async function executeRequest<T = any>(
         if (apiConfig.refreshToken && !hasRefreshedToken) {
           hasRefreshedToken = true;
           try {
-            if (!tokenRefreshPromise) {
-              tokenRefreshPromise = apiConfig.refreshToken();
+            let refreshPromise = tokenRefreshPromises.get(apiConfig);
+            if (!refreshPromise) {
+              refreshPromise = apiConfig.refreshToken();
+              tokenRefreshPromises.set(apiConfig, refreshPromise);
             }
-            const newToken = await tokenRefreshPromise;
-            tokenRefreshPromise = null;
+            const newToken = await refreshPromise;
+            tokenRefreshPromises.delete(apiConfig);
 
             if (newToken && apiConfig.tokenStorage) {
               await apiConfig.tokenStorage.setToken(newToken);
@@ -155,7 +169,7 @@ export async function executeRequest<T = any>(
               continue;
             }
           } catch (refreshErr) {
-            tokenRefreshPromise = null;
+            tokenRefreshPromises.delete(apiConfig);
             apiConfig.onTokenRefreshFailed?.();
           }
         }
@@ -168,11 +182,18 @@ export async function executeRequest<T = any>(
       // 7. Handle 429 Rate Limiting
       if (interceptedResponse.status === 429 && (apiConfig.retryAfter429 !== false || finalConfig.retryAfter429)) {
         const delayMs = parseRetryAfter(interceptedResponse.headers) || calculateBackoffWithJitter(attempt);
-        if (attempt < maxRetries) {
+        if (attempt < maxRetries && canRetry(method, finalConfig)) {
           await new Promise(res => setTimeout(res, delayMs));
           attempt++;
           continue;
         }
+      }
+
+      // Retry transient server failures only when replaying the method is safe.
+      if ((interceptedResponse.status === 408 || interceptedResponse.status === 425 || interceptedResponse.status >= 500) && attempt < maxRetries && canRetry(method, finalConfig)) {
+        await new Promise(res => setTimeout(res, calculateBackoffWithJitter(attempt, 300, apiConfig.maxRetryDelay || 10000)));
+        attempt++;
+        continue;
       }
 
       // 8. Runtime Schema Validation (Zod, Yup, etc.)
@@ -213,22 +234,27 @@ export async function executeRequest<T = any>(
 
       // 9. After successful GET, store in cache
       if (isGet && apiConfig.cache && finalData !== undefined && interceptedResponse.status >= 200 && interceptedResponse.status < 300) {
-        const ttl = finalConfig.cacheTtlMs || 60000;
+        const ttl = finalConfig.cacheTtlMs ?? 60000;
         await apiConfig.cache.set(cacheKey, { data: finalData, status: interceptedResponse.status, raw: interceptedResponse.raw }, ttl);
+      }
+      if (!isGet && apiConfig.cache && interceptedResponse.status >= 200 && interceptedResponse.status < 300) {
+        await apiConfig.cache.clear?.();
       }
 
       const duration = Date.now() - startTime;
       apiLogger.logResponse(method, finalUrl, interceptedResponse.status, duration, finalData);
 
+      let responseError: ApiError | null = interceptedResponse.status >= 400 ? {
+        message: `Request failed with status ${interceptedResponse.status}`,
+        status: interceptedResponse.status,
+        details: finalData,
+        isUnauthorized: interceptedResponse.status === 401,
+        isRateLimited: interceptedResponse.status === 429,
+      } : null;
+      if (responseError && apiConfig.onError) responseError = await apiConfig.onError(responseError);
       return {
         data: finalData,
-        error: interceptedResponse.status >= 400 ? {
-          message: `Request failed with status ${interceptedResponse.status}`,
-          status: interceptedResponse.status,
-          details: finalData,
-          isUnauthorized: interceptedResponse.status === 401,
-          isRateLimited: interceptedResponse.status === 429,
-        } : null,
+        error: responseError,
         status: interceptedResponse.status,
         raw: interceptedResponse.raw,
       };
@@ -264,11 +290,12 @@ export async function executeRequest<T = any>(
           method,
           data: body,
           headers: finalConfig.headers,
+          idempotencyKey: finalConfig.idempotencyKey,
         });
       }
 
       // Retry conditions (Network errors, timeouts, or 429 rate limit)
-      const shouldRetry = (apiError.isNetworkError || apiError.isTimeout || apiError.isRateLimited) && attempt < maxRetries;
+      const shouldRetry = (apiError.isNetworkError || apiError.isTimeout || apiError.isRateLimited) && attempt < maxRetries && canRetry(method, finalConfig);
       if (shouldRetry) {
         const delay = calculateBackoffWithJitter(attempt, 300, apiConfig.maxRetryDelay || 10000);
         await new Promise(res => setTimeout(res, delay));

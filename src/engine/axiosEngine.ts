@@ -6,14 +6,14 @@ export const axiosEngine: ApiEngine = {
       // Only import axios if this engine is used
       const axios = require('axios');
       
-      const { url, method = 'GET', data, headers, timeout } = config;
+      const { url, method = 'GET', data, headers, timeout, signal } = config;
       const response = await axios({
         url,
         method,
         data,
         headers,
         timeout,
-        // TODO: cancel token
+        signal,
       });
       return {
         data: response.data,
@@ -28,6 +28,5 @@ export const axiosEngine: ApiEngine = {
       throw error;
     }
   },
-  // TODO: cancel support
 };
 

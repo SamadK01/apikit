@@ -23,8 +23,11 @@ export function configureApiKit(config: ApiKitConfig): void {
     setDebugMode(config.debug);
   }
 
-  if (config.tokenStorage) {
-    offlineQueue.setStorage(config.tokenStorage);
+  if (config.offlineStorage) {
+    offlineQueue.setStorage(config.offlineStorage);
+  }
+  if (config.offlineMaxRetries !== undefined) {
+    offlineQueue.setMaxRetries(config.offlineMaxRetries);
   }
 
   // Set the engine based on config

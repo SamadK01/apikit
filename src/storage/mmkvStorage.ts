@@ -1,4 +1,4 @@
-import { TokenStorage } from '../types';
+import { KeyValueStorage, TokenStorage } from '../types';
 
 const TOKEN_KEY = 'apikit_token';
 let _mmkvInstance: any = null;
@@ -52,4 +52,20 @@ export function createMMKVTokenStorage(customInstance?: any): TokenStorage {
 }
 
 export const mmkvToken: TokenStorage = createMMKVTokenStorage();
- 
+
+/** Creates a general-purpose MMKV adapter, suitable for offlineQueue persistence. */
+export function createMMKVStorage(customInstance?: any): KeyValueStorage {
+  return {
+    getItem(key) {
+      try { return (customInstance || getMMKV())?.getString(key) || null; } catch { return null; }
+    },
+    setItem(key, value) {
+      try { (customInstance || getMMKV())?.set(key, value); } catch { /* unavailable storage */ }
+    },
+    removeItem(key) {
+      try { (customInstance || getMMKV())?.delete(key); } catch { /* unavailable storage */ }
+    },
+  };
+}
+
+export const mmkvStorage: KeyValueStorage = createMMKVStorage();

@@ -1,5 +1,6 @@
 export * from './hooks/useApi';
 export * from './hooks/useAiStream';
+export * from './hooks/useAgentTool';
 export * from './types';
 export * from './engine/fetchEngine';
 export * from './engine/axiosEngine';
@@ -9,6 +10,7 @@ export * from './storage/mmkvStorage';
 export { configureApiKit, getApiKitConfig, getEngine } from './config';
 export { apiClient, executeRequest } from './plainApiClient';
 export { createApiClient } from './createApiClient';
+export { executeAgentTool } from './agentTool';
 export { offlineQueue } from './offline/offlineQueue';
 export { uploadFile } from './utils/uploader';
 export { apiLogger, estimateAiTokens } from './utils/logger';

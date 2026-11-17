@@ -59,14 +59,34 @@ export declare const apiClient: {
         raw?: undefined;
     }>;
     offlineQueue: {
-        setStorage(storage: import("./types").TokenStorage): void;
+        setStorage(nextStorage: import("./types").KeyValueStorage | null): void;
+        setMaxRetries(value: number | undefined): void;
         getPending(): Promise<import("./types").OfflineMutation[]>;
         add(mutation: Omit<import("./types").OfflineMutation, "id" | "timestamp" | "retryCount">): Promise<string>;
         remove(id: string): Promise<void>;
         clear(): Promise<void>;
-        saveQueue(queue: import("./types").OfflineMutation[]): Promise<void>;
         sync(client: {
-            request: (config: any) => Promise<any>;
+            request: (config: {
+                url: string;
+                method: string;
+                data?: unknown;
+                headers?: Record<string, string>;
+            }) => Promise<{
+                data: unknown;
+                error: ApiError | null;
+            }>;
         }): Promise<import("./types").OfflineSyncResult[]>;
+        startAutoSync(client: {
+            request: (config: {
+                url: string;
+                method: string;
+                data?: unknown;
+                headers?: Record<string, string>;
+            }) => Promise<{
+                data: unknown;
+                error: ApiError | null;
+            }>;
+        }, subscribe: (onOnline: () => void) => () => void): () => void;
+        stopAutoSync(): void;
     };
 };

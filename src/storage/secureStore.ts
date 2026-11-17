@@ -1,4 +1,4 @@
-import { TokenStorage } from '../types';
+import { KeyValueStorage, TokenStorage } from '../types';
 
 const TOKEN_KEY = 'apikit_token';
 
@@ -30,5 +30,17 @@ export const secureStoreToken: TokenStorage = {
       console.warn('ApiKit: expo-secure-store not installed. Please install it: expo install expo-secure-store');
       return null;
     }
+  },
+};
+
+export const secureStore: KeyValueStorage = {
+  async getItem(key) {
+    try { return await require('expo-secure-store').getItemAsync(key); } catch { return null; }
+  },
+  async setItem(key, value) {
+    try { await require('expo-secure-store').setItemAsync(key, value); } catch { /* unavailable storage */ }
+  },
+  async removeItem(key) {
+    try { await require('expo-secure-store').deleteItemAsync(key); } catch { /* unavailable storage */ }
   },
 };

@@ -1,108 +1,88 @@
-import { OfflineMutation, OfflineSyncResult, TokenStorage } from '../types';
+import { ApiError, KeyValueStorage, OfflineMutation, OfflineSyncResult } from '../types';
 
-const QUEUE_STORAGE_KEY = 'apikit_offline_queue';
+const QUEUE_STORAGE_KEY = 'apikit:offline-mutations:v1';
+type RequestClient = { request: (config: { url: string; method: string; data?: unknown; headers?: Record<string, string> }) => Promise<{ data: unknown; error: ApiError | null }> };
 
-let customStorage: TokenStorage | null = null;
+let storage: KeyValueStorage | null = null;
 let memoryQueue: OfflineMutation[] = [];
+let syncing: Promise<OfflineSyncResult[]> | null = null;
+let unsubscribe: (() => void) | null = null;
+let maxRetries = 5;
 
+async function readQueue(): Promise<OfflineMutation[]> {
+  if (!storage) return [...memoryQueue];
+  try {
+    const raw = await storage.getItem(QUEUE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [...memoryQueue];
+  } catch { return [...memoryQueue]; }
+}
+
+async function writeQueue(queue: OfflineMutation[]): Promise<void> {
+  memoryQueue = queue;
+  if (!storage) return;
+  try { await storage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue)); } catch { /* memory fallback */ }
+}
+
+/** FIFO persistence for mutations that fail because the device is offline. */
 export const offlineQueue = {
-  setStorage(storage: TokenStorage) {
-    customStorage = storage;
-  },
-
-  async getPending(): Promise<OfflineMutation[]> {
-    if (customStorage) {
-      try {
-        const raw = await customStorage.getToken(); // using storage get interface
-        if (raw) return JSON.parse(raw);
-      } catch {
-        // Fallback to memory
-      }
-    }
-    return [...memoryQueue];
-  },
+  setStorage(nextStorage: KeyValueStorage | null) { storage = nextStorage; },
+  setMaxRetries(value: number | undefined) { maxRetries = Math.max(0, value ?? 5); },
+  async getPending(): Promise<OfflineMutation[]> { return readQueue(); },
 
   async add(mutation: Omit<OfflineMutation, 'id' | 'timestamp' | 'retryCount'>): Promise<string> {
-    const id = `mut_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const newEntry: OfflineMutation = {
-      ...mutation,
-      id,
-      timestamp: Date.now(),
-      retryCount: 0,
-    };
-
-    const current = await this.getPending();
-    current.push(newEntry);
-    await this.saveQueue(current);
-    return id;
+    const entry: OfflineMutation = { ...mutation, id: `mut_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, timestamp: Date.now(), retryCount: 0 };
+    const queue = await readQueue();
+    const duplicate = mutation.idempotencyKey && queue.some(item => item.idempotencyKey === mutation.idempotencyKey);
+    if (duplicate) return queue.find(item => item.idempotencyKey === mutation.idempotencyKey)!.id;
+    queue.push(entry);
+    await writeQueue(queue);
+    return entry.id;
   },
 
-  async remove(id: string): Promise<void> {
-    const current = await this.getPending();
-    const filtered = current.filter(item => item.id !== id);
-    await this.saveQueue(filtered);
-  },
-
+  async remove(id: string): Promise<void> { await writeQueue((await readQueue()).filter(item => item.id !== id)); },
   async clear(): Promise<void> {
     memoryQueue = [];
-    if (customStorage) {
-      try {
-        await customStorage.removeToken();
-      } catch {
-        // Ignore
-      }
-    }
+    if (storage) try { await storage.removeItem(QUEUE_STORAGE_KEY); } catch { /* memory queue cleared */ }
   },
 
-  async saveQueue(queue: OfflineMutation[]): Promise<void> {
-    memoryQueue = queue;
-    if (customStorage) {
-      try {
-        await customStorage.setToken(JSON.stringify(queue));
-      } catch {
-        // Ignore
-      }
-    }
-  },
-
-  async sync(client: { request: (config: any) => Promise<any> }): Promise<OfflineSyncResult[]> {
-    const queue = await this.getPending();
-    if (queue.length === 0) return [];
-
-    const results: OfflineSyncResult[] = [];
-    const remaining: OfflineMutation[] = [];
-
-    for (const mutation of queue) {
-      try {
-        const response = await client.request({
-          url: mutation.url,
-          method: mutation.method,
-          data: mutation.data,
-          headers: mutation.headers,
-        });
-
-        if (response.error && response.error.isNetworkError) {
-          // Still offline, stop sync and keep in queue
+  async sync(client: RequestClient): Promise<OfflineSyncResult[]> {
+    if (syncing) return syncing;
+    syncing = (async () => {
+      const queue = await readQueue();
+      const results: OfflineSyncResult[] = [];
+      const remaining: OfflineMutation[] = [];
+      for (let index = 0; index < queue.length; index += 1) {
+        const mutation = queue[index];
+        try {
+          const response = await client.request({ url: mutation.url, method: mutation.method, data: mutation.data, headers: mutation.headers });
+          if (response.error?.isNetworkError && mutation.retryCount < maxRetries) {
+            mutation.retryCount += 1;
+            remaining.push(mutation, ...queue.slice(index + 1));
+            results.push({ mutation, success: false, error: response.error });
+            break;
+          }
+          results.push(response.error ? { mutation, success: false, error: response.error } : { mutation, success: true, response: response.data });
+        } catch (error: any) {
           mutation.retryCount += 1;
-          remaining.push(mutation);
-          results.push({ mutation, success: false, error: response.error });
+          if (mutation.retryCount <= maxRetries) remaining.push(mutation, ...queue.slice(index + 1));
+          results.push({ mutation, success: false, error: { message: error?.message || 'Sync failed' } });
           break;
-        } else if (response.error) {
-          // Server rejected, discard from queue but report result
-          results.push({ mutation, success: false, error: response.error });
-        } else {
-          // Success
-          results.push({ mutation, success: true, response: response.data });
         }
-      } catch (err: any) {
-        mutation.retryCount += 1;
-        remaining.push(mutation);
-        results.push({ mutation, success: false, error: { message: err.message || 'Sync failed' } });
-        break;
       }
-    }
-
-    await this.saveQueue(remaining);
-    return results;
+      await writeQueue(remaining);
+      return results;
+    })();
+    try { return await syncing; } finally { syncing = null; }
   },
+
+  /**
+   * Connect NetInfo or another connectivity source without making it a runtime
+   * dependency. `subscribe` invokes `onOnline` whenever connectivity returns.
+   */
+  startAutoSync(client: RequestClient, subscribe: (onOnline: () => void) => () => void): () => void {
+    unsubscribe?.();
+    unsubscribe = subscribe(() => { void this.sync(client); });
+    return () => { unsubscribe?.(); unsubscribe = null; };
+  },
+  stopAutoSync() { unsubscribe?.(); unsubscribe = null; },
 };

@@ -1,6 +1,6 @@
 {
   "name": "react-native-apikit",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -8,8 +8,8 @@
     "README.md"
   ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc",
+    "test": "npm run build && node --test tests/*.test.js",
+    "build": "tsc && node scripts/minify.js",
     "prepare": "npm run build"
   },
   "keywords": [
@@ -49,7 +49,8 @@
     "@types/react-native": "^0.72.8",
     "react-native": "^0.78.0",
     "react-native-mmkv": "^3.3.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "terser": "^5.43.1"
   },
   "peerDependencies": {
     "react": ">=17.0.0",

@@ -1,6 +1,7 @@
 // Hooks
 export * from './hooks/useApi';
 export * from './hooks/useAiStream';
+export * from './hooks/useAgentTool';
 
 // Types
 export * from './types';
@@ -18,6 +19,7 @@ export * from './storage/mmkvStorage';
 export { configureApiKit, getApiKitConfig, getEngine } from './config';
 export { apiClient, executeRequest } from './plainApiClient';
 export { createApiClient } from './createApiClient';
+export { executeAgentTool } from './agentTool';
 
 // Offline Queue
 export { offlineQueue } from './offline/offlineQueue';
